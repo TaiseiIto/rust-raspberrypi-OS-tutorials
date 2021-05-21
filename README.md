@@ -1,4 +1,5 @@
 # Operating System development tutorials in Rust on the Raspberry Pi
+# RustによるRaspberry PiのOS開発指導
 
 ![](https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials/workflows/BSP-RPi3/badge.svg) ![](https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials/workflows/BSP-RPi4/badge.svg) ![](https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials/workflows/Unit-Tests/badge.svg) ![](https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials/workflows/Integration-Tests/badge.svg) ![](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue)
 
@@ -13,6 +14,11 @@ architecture]. The tutorials will give a guided, step-by-step tour of how to wri
 Operating System `kernel` for an `embedded system` from scratch. They cover implementation of common
 Operating Systems tasks, like writing to the serial console, setting up virtual memory and handling
 HW exceptions. All while leveraging `Rust`'s unique features to provide for safety and speed.
+
+ARM64bit architecture初心者向けのOS開発入門編です．
+組み込みsystem向けの堅固なkernelを書くための手順を示します．
+serial consoleへの書き込み，仮想memoryの設定，Hardware例外などOSが一般的に有する機能の実装を網羅します．
+全てにおいて安全性と速度を与えるためにRustの特徴を用います．
 
 Have fun!
 
@@ -31,24 +37,35 @@ moment though.
 ## 淘 Organization
 
 - Each tutorial contains a stand-alone, bootable `kernel` binary.
+- 各項目は独立した起動可能なkernel bynaryを含みます．
 - Each new tutorial extends the previous one.
+- 新しい項目は前の項目の拡張です．
 - Each tutorial `README` will have a short `tl;dr` section giving a brief overview of the additions,
   and show the source code `diff` to the previous tutorial, so that you can conveniently inspect the
   changes/additions.
     - Some tutorials have a full-fledged, detailed text in addition to the `tl;dr` section. The
       long-term plan is that all tutorials get a full text, but for now this is exclusive to
       tutorials where I think that `tl;dr` and `diff` are not enough to get the idea.
+- 各項目のREADMEには追加部分の大まかな全体像を示す短い要約があり，前項目とのsource codeの差分を示すので，変更点，追加点を簡単に確認できます．
+    - 要約に加えて詳細を記述している項目もあります．長期計画的には全ての項目に詳細を書くつもりですが，今は要約と差分だけでは理解するのに不足していると考えられる項目に限られている．
 - The code written in these tutorials supports and runs on the **Raspberry Pi 3** and the
   **Raspberry Pi 4**.
   - Tutorials 1 till 5 are groundwork code which only makes sense to run in `QEMU`.
   - Starting with [tutorial 5](05_drivers_gpio_uart), you can load and run the kernel on the real
     Raspberrys and observe output over `UART`.
+- これらの項目に書かれたcodeはRaspberry Pi 3およびRaspberry Pi 4に対応し，走らせることができます．
+  - 項目1から5まではQEMU上で走らせるための土台を作ります．
+  - 項目5から，kernelをRaspberryに読み込んで走らせ，UARTによる出力を確認します．
 - Although the Raspberry Pi 3 and 4 are the main target boards, the code is written in a modular
   fashion which allows for easy porting to other CPU architectures and/or boards.
   - I would really love if someone takes a shot at a **RISC-V** implementation!
+- Raspberry Pi 3と4が対象基盤ですが，このcodeはほかのCPU architecturesや基盤に簡単に移植できるmodular方式で書かれる．
+  - 誰かがRISC-Vの実装を作ってくれることを期待している．
 - For editing, I recommend [Visual Studio Code] with [Rust Analyzer].
+  - 編集にはVisual Studio CodeでRust Analyzerを使うことをお勧めする．
 - In addition to the tutorial text, also check out the `make doc` command in each tutorial. It lets
   you browse the extensively documented code in a convenient way.
+- この解説に加えて，各項目のmake doc commandを見てみよう．多くの文書化されたcodeを簡単に眺めることができる．
 
 ### Output of `make doc`
 
@@ -61,6 +78,8 @@ moment though.
 
 The tutorials are primarily targeted at **Linux**-based distributions. Most stuff will also work on
 other Unix flavors such as **macOS**, but this is only _experimental_.
+
+この解説は主にLinux-based distributionsを対象とします．ほとんどの要素はmaxOSなどのUnix風OSでも動きますが，実験的なものです．
 
 ### 噫 The tl;dr Version
 
