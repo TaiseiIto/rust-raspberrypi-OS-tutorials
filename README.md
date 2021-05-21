@@ -1,5 +1,5 @@
 # Operating System development tutorials in Rust on the Raspberry Pi
-# Rust‚É‚æ‚éRaspberry Pi‚ÌOSŠJ”­w“±
+# Rustã«ã‚ˆã‚‹Raspberry Piã®OSé–‹ç™ºæŒ‡å°
 
 ![](https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials/workflows/BSP-RPi3/badge.svg) ![](https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials/workflows/BSP-RPi4/badge.svg) ![](https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials/workflows/Unit-Tests/badge.svg) ![](https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials/workflows/Integration-Tests/badge.svg) ![](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue)
 
@@ -7,7 +7,7 @@
 
 <img src="doc/header.jpg" height="379"> <img src="doc/minipush_demo_frontpage.gif" height="379">
 
-## â„¹ï¸ Introduction
+## ?? Introduction
 
 This is a tutorial series for hobby OS developers who are new to ARM's 64 bit [ARMv8-A
 architecture]. The tutorials will give a guided, step-by-step tour of how to write a [monolithic]
@@ -15,10 +15,10 @@ Operating System `kernel` for an `embedded system` from scratch. They cover impl
 Operating Systems tasks, like writing to the serial console, setting up virtual memory and handling
 HW exceptions. All while leveraging `Rust`'s unique features to provide for safety and speed.
 
-ARM64bit architecture‰SÒŒü‚¯‚ÌOSŠJ”­“ü–å•Ò‚Å‚·D
-‘g‚İ‚İsystemŒü‚¯‚ÌŒ˜ŒÅ‚Èkernel‚ğ‘‚­‚½‚ß‚Ìè‡‚ğ¦‚µ‚Ü‚·D
-serial console‚Ö‚Ì‘‚«‚İC‰¼‘zmemory‚Ìİ’èCHardware—áŠO‚È‚ÇOS‚ªˆê”Ê“I‚É—L‚·‚é‹@”\‚ÌÀ‘•‚ğ–Ô—…‚µ‚Ü‚·D
-‘S‚Ä‚É‚¨‚¢‚ÄˆÀ‘S«‚Æ‘¬“x‚ğ—^‚¦‚é‚½‚ß‚ÉRust‚Ì“Á’¥‚ğ—p‚¢‚Ü‚·D
+ARM64bit architectureåˆå¿ƒè€…å‘ã‘ã®OSé–‹ç™ºå…¥é–€ç·¨ã§ã™ï¼
+çµ„ã¿è¾¼ã¿systemå‘ã‘ã®å …å›ºãªkernelã‚’æ›¸ããŸã‚ã®æ‰‹é †ã‚’ç¤ºã—ã¾ã™ï¼
+serial consoleã¸ã®æ›¸ãè¾¼ã¿ï¼Œä»®æƒ³memoryã®è¨­å®šï¼ŒHardwareä¾‹å¤–ãªã©OSãŒä¸€èˆ¬çš„ã«æœ‰ã™ã‚‹æ©Ÿèƒ½ã®å®Ÿè£…ã‚’ç¶²ç¾…ã—ã¾ã™ï¼
+å…¨ã¦ã«ãŠã„ã¦å®‰å…¨æ€§ã¨é€Ÿåº¦ã‚’ä¸ãˆã‚‹ãŸã‚ã«Rustã®ç‰¹å¾´ã‚’ç”¨ã„ã¾ã™ï¼
 
 Have fun!
 
@@ -34,38 +34,38 @@ moment though.
 [@colachg]: https://github.com/colachg
 [@readlnh]: https://github.com/readlnh
 
-## ğŸ“‘ Organization
+## ? Organization
 
 - Each tutorial contains a stand-alone, bootable `kernel` binary.
-- Še€–Ú‚Í“Æ—§‚µ‚½‹N“®‰Â”\‚Èkernel bynary‚ğŠÜ‚İ‚Ü‚·D
+- å„é …ç›®ã¯ç‹¬ç«‹ã—ãŸèµ·å‹•å¯èƒ½ãªkernel bynaryã‚’å«ã¿ã¾ã™ï¼
 - Each new tutorial extends the previous one.
-- V‚µ‚¢€–Ú‚Í‘O‚Ì€–Ú‚ÌŠg’£‚Å‚·D
+- æ–°ã—ã„é …ç›®ã¯å‰ã®é …ç›®ã®æ‹¡å¼µã§ã™ï¼
 - Each tutorial `README` will have a short `tl;dr` section giving a brief overview of the additions,
   and show the source code `diff` to the previous tutorial, so that you can conveniently inspect the
   changes/additions.
     - Some tutorials have a full-fledged, detailed text in addition to the `tl;dr` section. The
       long-term plan is that all tutorials get a full text, but for now this is exclusive to
       tutorials where I think that `tl;dr` and `diff` are not enough to get the idea.
-- Še€–Ú‚ÌREADME‚É‚Í’Ç‰Á•”•ª‚Ì‘å‚Ü‚©‚È‘S‘Ì‘œ‚ğ¦‚·’Z‚¢—v–ñ‚ª‚ ‚èC‘O€–Ú‚Æ‚Ìsource code‚Ì·•ª‚ğ¦‚·‚Ì‚ÅC•ÏX“_C’Ç‰Á“_‚ğŠÈ’P‚ÉŠm”F‚Å‚«‚Ü‚·D
-    - —v–ñ‚É‰Á‚¦‚ÄÚ×‚ğ‹Lq‚µ‚Ä‚¢‚é€–Ú‚à‚ ‚è‚Ü‚·D’·ŠúŒv‰æ“I‚É‚Í‘S‚Ä‚Ì€–Ú‚ÉÚ×‚ğ‘‚­‚Â‚à‚è‚Å‚·‚ªC¡‚Í—v–ñ‚Æ·•ª‚¾‚¯‚Å‚Í—‰ğ‚·‚é‚Ì‚É•s‘«‚µ‚Ä‚¢‚é‚Æl‚¦‚ç‚ê‚é€–Ú‚ÉŒÀ‚ç‚ê‚Ä‚¢‚éD
+- å„é …ç›®ã®READMEã«ã¯è¿½åŠ éƒ¨åˆ†ã®å¤§ã¾ã‹ãªå…¨ä½“åƒã‚’ç¤ºã™çŸ­ã„è¦ç´„ãŒã‚ã‚Šï¼Œå‰é …ç›®ã¨ã®source codeã®å·®åˆ†ã‚’ç¤ºã™ã®ã§ï¼Œå¤‰æ›´ç‚¹ï¼Œè¿½åŠ ç‚¹ã‚’ç°¡å˜ã«ç¢ºèªã§ãã¾ã™ï¼
+    - è¦ç´„ã«åŠ ãˆã¦è©³ç´°ã‚’è¨˜è¿°ã—ã¦ã„ã‚‹é …ç›®ã‚‚ã‚ã‚Šã¾ã™ï¼é•·æœŸè¨ˆç”»çš„ã«ã¯å…¨ã¦ã®é …ç›®ã«è©³ç´°ã‚’æ›¸ãã¤ã‚‚ã‚Šã§ã™ãŒï¼Œä»Šã¯è¦ç´„ã¨å·®åˆ†ã ã‘ã§ã¯ç†è§£ã™ã‚‹ã®ã«ä¸è¶³ã—ã¦ã„ã‚‹ã¨è€ƒãˆã‚‰ã‚Œã‚‹é …ç›®ã«é™ã‚‰ã‚Œã¦ã„ã‚‹ï¼
 - The code written in these tutorials supports and runs on the **Raspberry Pi 3** and the
   **Raspberry Pi 4**.
   - Tutorials 1 till 5 are groundwork code which only makes sense to run in `QEMU`.
   - Starting with [tutorial 5](05_drivers_gpio_uart), you can load and run the kernel on the real
     Raspberrys and observe output over `UART`.
-- ‚±‚ê‚ç‚Ì€–Ú‚É‘‚©‚ê‚½code‚ÍRaspberry Pi 3‚¨‚æ‚ÑRaspberry Pi 4‚É‘Î‰‚µC‘–‚ç‚¹‚é‚±‚Æ‚ª‚Å‚«‚Ü‚·D
-  - €–Ú1‚©‚ç5‚Ü‚Å‚ÍQEMUã‚Å‘–‚ç‚¹‚é‚½‚ß‚Ì“y‘ä‚ğì‚è‚Ü‚·D
-  - €–Ú5‚©‚çCkernel‚ğRaspberry‚É“Ç‚İ‚ñ‚Å‘–‚ç‚¹CUART‚É‚æ‚éo—Í‚ğŠm”F‚µ‚Ü‚·D
+- ã“ã‚Œã‚‰ã®é …ç›®ã«æ›¸ã‹ã‚ŒãŸcodeã¯Raspberry Pi 3ãŠã‚ˆã³Raspberry Pi 4ã«å¯¾å¿œã—ï¼Œèµ°ã‚‰ã›ã‚‹ã“ã¨ãŒã§ãã¾ã™ï¼
+  - é …ç›®1ã‹ã‚‰5ã¾ã§ã¯QEMUä¸Šã§èµ°ã‚‰ã›ã‚‹ãŸã‚ã®åœŸå°ã‚’ä½œã‚Šã¾ã™ï¼
+  - é …ç›®5ã‹ã‚‰ï¼Œkernelã‚’Raspberryã«èª­ã¿è¾¼ã‚“ã§èµ°ã‚‰ã›ï¼ŒUARTã«ã‚ˆã‚‹å‡ºåŠ›ã‚’ç¢ºèªã—ã¾ã™ï¼
 - Although the Raspberry Pi 3 and 4 are the main target boards, the code is written in a modular
   fashion which allows for easy porting to other CPU architectures and/or boards.
   - I would really love if someone takes a shot at a **RISC-V** implementation!
-- Raspberry Pi 3‚Æ4‚ª‘ÎÛŠî”Õ‚Å‚·‚ªC‚±‚Ìcode‚Í‚Ù‚©‚ÌCPU architectures‚âŠî”Õ‚ÉŠÈ’P‚ÉˆÚA‚Å‚«‚émodular•û®‚Å‘‚©‚ê‚éD
-  - ’N‚©‚ªRISC-V‚ÌÀ‘•‚ğì‚Á‚Ä‚­‚ê‚é‚±‚Æ‚ğŠú‘Ò‚µ‚Ä‚¢‚éD
+- Raspberry Pi 3ã¨4ãŒå¯¾è±¡åŸºç›¤ã§ã™ãŒï¼Œã“ã®codeã¯ã»ã‹ã®CPU architecturesã‚„åŸºç›¤ã«ç°¡å˜ã«ç§»æ¤ã§ãã‚‹modularæ–¹å¼ã§æ›¸ã‹ã‚Œã‚‹ï¼
+  - èª°ã‹ãŒRISC-Vã®å®Ÿè£…ã‚’ä½œã£ã¦ãã‚Œã‚‹ã“ã¨ã‚’æœŸå¾…ã—ã¦ã„ã‚‹ï¼
 - For editing, I recommend [Visual Studio Code] with [Rust Analyzer].
-  - •ÒW‚É‚ÍVisual Studio Code‚ÅRust Analyzer‚ğg‚¤‚±‚Æ‚ğ‚¨Š©‚ß‚·‚éD
+- ç·¨é›†ã«ã¯Visual Studio Codeã§Rust Analyzerã‚’ä½¿ã†ã“ã¨ã‚’ãŠå‹§ã‚ã™ã‚‹ï¼
 - In addition to the tutorial text, also check out the `make doc` command in each tutorial. It lets
   you browse the extensively documented code in a convenient way.
-- ‚±‚Ì‰ğà‚É‰Á‚¦‚ÄCŠe€–Ú‚Ìmake doc command‚ğŒ©‚Ä‚İ‚æ‚¤D‘½‚­‚Ì•¶‘‰»‚³‚ê‚½code‚ğŠÈ’P‚É’­‚ß‚é‚±‚Æ‚ª‚Å‚«‚éD
+- ã“ã®è§£èª¬ã«åŠ ãˆã¦ï¼Œå„é …ç›®ã®make doc commandã‚’è¦‹ã¦ã¿ã‚ˆã†ï¼å¤šãã®æ–‡æ›¸åŒ–ã•ã‚ŒãŸcodeã‚’ç°¡å˜ã«çœºã‚ã‚‹ã“ã¨ãŒã§ãã‚‹ï¼
 
 ### Output of `make doc`
 
@@ -74,14 +74,14 @@ moment though.
 [Visual Studio Code]: https://code.visualstudio.com
 [Rust Analyzer]: https://rust-analyzer.github.io
 
-## ğŸ›  System Requirements
+## ? System Requirements
 
 The tutorials are primarily targeted at **Linux**-based distributions. Most stuff will also work on
 other Unix flavors such as **macOS**, but this is only _experimental_.
 
-‚±‚Ì‰ğà‚Íå‚ÉLinux-based distributions‚ğ‘ÎÛ‚Æ‚µ‚Ü‚·D‚Ù‚Æ‚ñ‚Ç‚Ì—v‘f‚ÍmaxOS‚È‚Ç‚ÌUnix•—OS‚Å‚à“®‚«‚Ü‚·‚ªCÀŒ±“I‚È‚à‚Ì‚Å‚·D
+ã“ã®è§£èª¬ã¯ä¸»ã«Linux-based distributionsã‚’å¯¾è±¡ã¨ã—ã¾ã™ï¼ã»ã¨ã‚“ã©ã®è¦ç´ ã¯maxOSãªã©ã®Unixé¢¨OSã§ã‚‚å‹•ãã¾ã™ãŒï¼Œå®Ÿé¨“çš„ãªã‚‚ã®ã§ã™ï¼
 
-### ğŸš€ The tl;dr Version
+### ? The tl;dr Version
 
 1. [Install Docker][install_docker].
 1. Ensure your user account is in the [docker group].
@@ -112,7 +112,7 @@ other Unix flavors such as **macOS**, but this is only _experimental_.
 [docker group]: https://docs.docker.com/engine/install/linux-postinstall/
 [Rust Analyzer extension]: https://marketplace.visualstudio.com/items?itemName=matklad.rust-analyzer
 
-### ğŸ§° More Details: Eliminating Toolchain Hassle
+### ? More Details: Eliminating Toolchain Hassle
 
 This series tries to put a strong focus on user friendliness. Therefore, efforts were made to
 eliminate the biggest painpoint in embedded development as much as possible: `Toolchain hassle`.
@@ -137,7 +137,7 @@ provided container, please refer to the repository's [docker](docker) folder.
 
 [install_docker]: https://docs.docker.com/get-docker/
 
-## ğŸ“Ÿ USB Serial Output
+## ? USB Serial Output
 
 Since the kernel developed in the tutorials runs on the real hardware, it is highly recommended to
 get a USB serial cable to get the full experience.
@@ -157,7 +157,7 @@ get a USB serial cable to get the full experience.
 [\[1\]]: https://www.amazon.de/dp/B0757FQ5CX/ref=cm_sw_r_tw_dp_U_x_ozGRDbVTJAG4Q
 [\[2\]]: https://www.adafruit.com/product/954
 
-## ğŸ™Œ Acknowledgements
+## ? Acknowledgements
 
 The original version of the tutorials started out as a fork of [Zoltan
 Baldaszti](https://github.com/bztsrc)'s awesome [tutorials on bare metal programming on
