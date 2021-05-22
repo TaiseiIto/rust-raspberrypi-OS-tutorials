@@ -82,9 +82,12 @@ other Unix flavors such as **macOS**, but this is only _experimental_.
 この解説は主にLinux-based distributionsを対象とします．ほとんどの要素はmaxOSなどのUnix風OSでも動きますが，実験的なものです．
 
 ### ? The tl;dr Version
+### 要約版
 
 1. [Install Docker][install_docker].
+1. Dockerを導入
 1. Ensure your user account is in the [docker group].
+1. アカウントがdocker groupにあることを確認してください．
 1. Prepare the `Rust` toolchain. Most of it will be handled on first use through the
    [rust-toolchain](rust-toolchain) file. What's left for us to do is:
    1. If you already have a version of Rust installed:
@@ -93,6 +96,18 @@ other Unix flavors such as **macOS**, but this is only _experimental_.
       ```
 
    1. If you need to install Rust from scratch:
+      ```bash
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+      source $HOME/.cargo/env
+      cargo install cargo-binutils rustfilt
+      ```
+1. Rust製品群を用意しましょう．そのほとんどはrust製品群の最初の使用で扱われます．すべきことは以下の通り．
+   1. Rustのある版が既に入っている場合
+      ```bash
+      cargo install cargo-binutils rustfilt
+      ```
+   1. 最初にRustを入れる必要がある場合
       ```bash
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
