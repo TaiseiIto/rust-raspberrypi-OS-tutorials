@@ -116,8 +116,15 @@ other Unix flavors such as **macOS**, but this is only _experimental_.
       ```
 
 1. In case you use `Visual Studio Code`, I strongly recommend installing the [Rust Analyzer extension].
+1. Visual Studio Codeを使用する場合，Rust Analyzer extensionの導入を強く勧める．
 1. If you are **NOT** running Linux, some `Ruby` gems are needed as well:
 
+   ```bash
+   sudo gem install bundler
+   bundle config set path '.vendor/bundle'
+   bundle install
+   ```
+1. Linuxを動かさない場合，何かしらのRubyのgem(Rubyのライブラリ)が必要になります．:w
    ```bash
    sudo gem install bundler
    bundle config set path '.vendor/bundle'
@@ -128,31 +135,45 @@ other Unix flavors such as **macOS**, but this is only _experimental_.
 [Rust Analyzer extension]: https://marketplace.visualstudio.com/items?itemName=matklad.rust-analyzer
 
 ### ? More Details: Eliminating Toolchain Hassle
+### 詳細:製品群を除去すると困ること
 
 This series tries to put a strong focus on user friendliness. Therefore, efforts were made to
 eliminate the biggest painpoint in embedded development as much as possible: `Toolchain hassle`.
+
+このseriesはやりやすさに焦点を当ててみます．故に，組み込み開発の最も大変な個所をできるだけ除くための努力がなされる．
 
 Rust itself is already helping a lot in that regard, because it has built-in support for
 cross-compilation. All that we need for cross-compiling from an `x86` host to the Raspberry Pi's
 `AArch64` architecture will be automatically installed by `rustup`. However, besides the Rust
 compiler, we will use some more tools. Among others:
 
+この点に関してRustはcross-compilationのbuilt-in supportを持っており，すでに多くの支援をしている．x86 hostからRaspberry PiのAArch64へのcross-compilingに必要なものはrustupによって自動的に導入される．しかし，Rust compilerに加えて，以下のような製品を使う．
+
 - `QEMU` to emulate our kernel on the host system.
 - A self-made tool called `Minipush` to load a kernel onto the Raspberry Pi on-demand over `UART`.
 - `OpenOCD` and `GDB` for debugging on the target.
 
+- host system上で作成するkernelを模倣するためのQEMU
+- UARTの要求に従ってkernelをRaspberry Piに読み込むためのMinipushと呼ばれる自作製品
+- 対象をdebugするためのOpenOCDとGDB
+
 There is a lot that can go wrong while installing and/or compiling the correct version of each tool
 on your host machine. For example, your distribution might not provide the latest version that is
 needed. Or you are missing some hard-to-get dependencies for the compilation of one of these tools.
+
+host machineへの各製品の正しい版のinstallingやcompilingで多くの間違えうる箇所がある．例えば，distributionは必要な製品の最新版を提供しないかもしれない．若しくはこれらの製品のcompilationのための何らかの依存関係を失うかもしれない．
 
 This is why we will make use of [Docker][install_docker] whenever possible. We are providing an
 accompanying container that has all the needed tools or dependencies pre-installed, and it gets
 pulled in automagically once it is needed. If you want to know more about Docker and peek at the
 provided container, please refer to the repository's [docker](docker) folder.
 
+これができる限りDockerを使う理由だ．必要な製品と依存関係を事前に導入した付属のcontainerを提供する．これは一度自動的に押し込まれる．Dockerとこのcontainerについての詳細は，docker folderを参照してください．
+
 [install_docker]: https://docs.docker.com/get-docker/
 
 ## ? USB Serial Output
+## USB Serial出力
 
 Since the kernel developed in the tutorials runs on the real hardware, it is highly recommended to
 get a USB serial cable to get the full experience.
