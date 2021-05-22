@@ -178,15 +178,21 @@ provided container, please refer to the repository's [docker](docker) folder.
 Since the kernel developed in the tutorials runs on the real hardware, it is highly recommended to
 get a USB serial cable to get the full experience.
 
+このtutorialsで開発されるkernelは実機上で動くため，経験のためUSB serial cableが勧められる．
+
 - You can find USB-to-serial cables that should work right away at [\[1\]] [\[2\]], but many others
   will work too. Ideally, your cable is based on the `CP2102` chip.
+- [\[1\]] [\[2\]]にUSBからserialへのすぐに動作するcablesがあるが，多くの他の物も同様に動作する．cableはCP2102 chipに準拠していることが望ましい．
 - You connect it to `GND` and GPIO pins `14/15` as shown below.
+- 以下に示すようにcableをGNDとGPIO pins `14/15`に繋げる．
 - [Tutorial 5](05_drivers_gpio_uart) is the first where you can use it. Check it out for
   instructions on how to prepare the SD card to boot your self-made kernel from it.
+- これは[Tutorial 5](05_drivers_gpio_uart)で最初に使われる．自分で作ったkernelを起動するためにSD cardを準備する命令を確認しよう．
 - Starting with [tutorial 6](06_uart_chainloader), booting kernels on your Raspberry is getting
   _really_ comfortable. In this tutorial, a so-called `chainloader` is developed, which will be the
   last file you need to manually copy on the SD card for a while. It will enable you to load the
   tutorial kernels during boot on demand over `UART`.
+- [tutorial 6](06_uart_chainloader)からは，Raspberry上でのkernelsの起動が快適になる．この項目で，手動でSD cardにcopyする最後のfileとなるいわゆる`chainloader`が開発される．起動している間`UART`経由の要求でtutorial kernelsを読み込めるようになる．
 
 ![UART wiring diagram](doc/wiring.png)
 
@@ -194,22 +200,32 @@ get a USB serial cable to get the full experience.
 [\[2\]]: https://www.adafruit.com/product/954
 
 ## ? Acknowledgements
+## 謝辞
 
 The original version of the tutorials started out as a fork of [Zoltan
 Baldaszti](https://github.com/bztsrc)'s awesome [tutorials on bare metal programming on
 RPi3](https://github.com/bztsrc/raspi3-tutorial) in `C`. Thanks for giving me a head start!
 
+このtutorialsは[Zoltan Baldaszti](https://github.com/bztsrc)によるC言語を使った[tutorials on bare metal programming on RPi3](https://github.com/bztsrc/raspi3-tutorial)をもとにしている．有益な種を下さったことに感謝申し上げます．
+
 ## License
+## 利用許諾条件
 
 Licensed under either of
+以下の2つのlicenseと利用者の付加条件により条件付けされます．
 
 - Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
 
+
 ### Contribution
+### 貢献
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the
 work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any
 additional terms or conditions.
+
+明確に異なる立場をとらない限り，Apache-2.0 licenseに定義されるように任意の貢献は意図的に提示され，追加の条件や制約なしに上記の通り二重に条件付けされる．
+
