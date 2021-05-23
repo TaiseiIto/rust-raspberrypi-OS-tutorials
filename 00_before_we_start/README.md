@@ -78,12 +78,16 @@ board for which the kernel is compiled. For example, the `interrupt controller` 
 `Raspberry Pi 3` and the `Raspberry Pi 4` is different, but we want the rest of the `kernel` code to
 play nicely with any of the two without much hassle.
 
+`arch`と`bps`は対象architectureと基盤に従ってcompileされるcodeを含みます．例えば，`Raspberry Pi 3`と`Raspberry Pi 4`の割り込み制御hardwareは異なりますが，我々はそのどちらでも労力を使わずに動かすための`kernel` codeの土台を必要としています．
+
 In order to provide a clean abstraction between `arch`, `bsp` and `generic kernel code`, `interface`
 traits are provided *whenever possible* and *where it makes sense*. They are defined in the
 respective subsystem module and help to enforce the idiom of *program to an interface, not an
 implementation*. For example, there will be a common IRQ handling interface which the two different
 interrupt controller `drivers` of both Raspberrys will implement, and only export the interface to
 the rest of the `kernel`.
+
+`arch`，`bsp`，`generic kernel code`の抽象化を提供する代わりに，`interface` traitsが可能な限り道理にかなうように提供されます．これらは各subsystem moduleで定義され，programから直接実装ではなくinterfaceを介した表現を可能にします．例えば，2種類のRaspberryそれぞれの割り込み制御器driversへの一般IRQ処理interfaceが実装され，kernelの土台へのinterfaceのみが出力されるでしょう．(仮想化によってhardwareの違いを隠蔽するということかな)
 
 ```
         +-------------------+
@@ -100,6 +104,7 @@ the rest of the `kernel`.
 ```
 
 # Summary
+# まとめ
 
 For a logical `kernel` subsystem, corresponding code can be distributed over several physical
 locations. Here is an example for the **memory** subsystem:
@@ -122,9 +127,33 @@ From a namespace perspective, **memory** subsystem code lives in:
 - `crate::memory::*`
 - `crate::bsp::memory::*`
 
+論理`kernel` subsystemのため，対応するcodeは幾つかの場所に分配されます．**memory** subsystemの例を示します．
+
+- `src/memory.rs`と`src/memory/**/*`
+  - 不可知な対象processor architectureと`BPS`特性に共通codeです．
+    - 例:ひとまとまりのmemory領域を0番地に合わせるための関数
+  - `arch`や`BSP`のcodeで実装されたmemory subsystemのinterfaces
+    - 例:`MMU`関数のprototype宣言を定義する`MMU`interface
+- `src/bps/__board_name__/memory.rs`と`src/bps/__board_name__/memory/**/*`
+  - `BPS`別のcode
+  - 例:対象基盤のmemory map (DRAMとMMIO機器の物理番地)
+- `src/_arch/__arch_name__/memory.rs`と`src/_arch/__arch_name__/memory/**/*`
+  - Processor architecture別のcode
+  - 例:`__arch_name__` processor向けの`MMU` interfaceの実装
+
+名前空間の考え方から，**memory** subsystem codeは
+
+- `crate::memory::*`
+- `crate::bsp::memory::*`
+
+にあります．
+
 # Boot flow
+# 起動の流れ
 
 1. The kernel's entry point is the function `cpu::boot::arch_boot::_start()`.
     - It is implemented in `src/_arch/__arch_name__/cpu/boot.s`.
 
+1. kernelの始点は`cpu::boot::arch_boot::_start()`関数です．
+    - これは`src/_arch/__arch_name__/cpu/boot.s`に実装されています．
 
