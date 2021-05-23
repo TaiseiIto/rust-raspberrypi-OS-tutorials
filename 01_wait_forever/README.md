@@ -1,25 +1,25 @@
 # Tutorial 01 - Wait Forever
-# ‘æ1Í - ‰i‰“‚É‘Ò‹@
+# ç¬¬1ç«  - æ°¸é ã«å¾…æ©Ÿ
 
 ## tl;dr
-## —v–ñ
+## è¦ç´„
 
 - The project skeleton is set up.
 - A small piece of assembly code runs that just halts all CPU cores executing the kernel code.
 
-- œ‘g‚İ‚ªİ’u‚³‚ê‚éD
-- kernel code‚ğÀs‚·‚éCPU‚Ì‘S‚Ä‚Ìcore‚ğ’â~‚³‚¹‚éassembly code‚Ì¬•Ğ‚ğ‘–‚ç‚¹‚éD
+- éª¨çµ„ã¿ãŒè¨­ç½®ã•ã‚Œã‚‹ï¼
+- kernel codeã‚’å®Ÿè¡Œã™ã‚‹CPUã®å…¨ã¦ã®coreã‚’åœæ­¢ã•ã›ã‚‹assembly codeã®å°ç‰‡ã‚’èµ°ã‚‰ã›ã‚‹ï¼
 
 ## Building
 
 - `Makefile` targets:
     - `doc`: Generate documentation.
     - `qemu`: Run the `kernel` in QEMU
-    - `clippy`‚±‚ê‚Í‰½‚¾?
+    - `clippy`ã“ã‚Œã¯ä½•ã ?
     - `clean`
-    - `readelf`: Inspect the `ELF` output. ELFo—Í‚ğŒŸ¸
-    - `objdump`: Inspect the assembly. assembly‚ğŒŸ¸
-    - `nm`: Inspect the symbols. symbols‚ğŒŸ¸
+    - `readelf`: Inspect the `ELF` output. ELFå‡ºåŠ›ã‚’æ¤œæŸ»
+    - `objdump`: Inspect the assembly. assemblyã‚’æ¤œæŸ»
+    - `nm`: Inspect the symbols. symbolsã‚’æ¤œæŸ»
 
 ## Code to look at
 
@@ -33,14 +33,14 @@
 - We (have to) define a `#[panic_handler]` function to make the compiler happy.
     - Make it `unimplemented!()` because it will be stripped out since it is not used.
 
-- `BSP`•Ê‚Ì`link.ld` linker‹Lq
-    - `0x8_0000`”Ô’n‚ğ“Ç‚İ‚ŞD
-    - `.text` section‚Ì‚İ
-- `main.rs`; d—v[“à•”‘®«]:
+- `BSP`åˆ¥ã®`link.ld` linkerè¨˜è¿°
+    - `0x8_0000`ç•ªåœ°ã‚’èª­ã¿è¾¼ã‚€ï¼
+    - `.text` sectionã®ã¿
+- `main.rs`; é‡è¦[å†…éƒ¨å±æ€§]:
     - `#![no_std]`, `#![no_main]`
-- `boot.s`: Event‚ğ‘Ò‚Â`wfe`‚ğÀs‚µC`_start()`‚ğÀs‚·‚é‘S‚Ä‚Ìcore‚ğ’â~‚·‚éassembly`_start()`ŠÖ”
-- compiler‚ğ‘å–‚É‚·‚é‚½‚ß‚É`#[panic_handler]`ŠÖ”‚ğ’è‹`‚µ‚È‚¯‚ê‚Î‚È‚ç‚È‚¢D
-    - g‚í‚ê‚Ä‚¢‚È‚¢‚¤‚¿‚Í‚±‚ê‚ğæ‚èœ‚­‚½‚ß‚±‚ê‚ğ`unimplemented!()`‚É‚·‚éD
+- `boot.s`: Eventã‚’å¾…ã¤`wfe`ã‚’å®Ÿè¡Œã—ï¼Œ`_start()`ã‚’å®Ÿè¡Œã™ã‚‹å…¨ã¦ã®coreã‚’åœæ­¢ã™ã‚‹assembly`_start()`é–¢æ•°
+- compilerã‚’å¤§äº‹ã«ã™ã‚‹ãŸã‚ã«`#[panic_handler]`é–¢æ•°ã‚’å®šç¾©ã—ãªã‘ã‚Œã°ãªã‚‰ãªã„ï¼
+    - ä½¿ã‚ã‚Œã¦ã„ãªã„ã†ã¡ã¯ã“ã‚Œã‚’å–ã‚Šé™¤ããŸã‚ã“ã‚Œã‚’`unimplemented!()`ã«ã™ã‚‹ï¼
 
 [inner attributes]: https://doc.rust-lang.org/reference/attributes.html
 
@@ -48,7 +48,7 @@
 
 In the project folder, invoke QEMU and observe the CPU core spinning on `wfe`:
 
-project folder‚É‚ÄCQEMU‚ğŒÄ‚Ño‚µ‚ÄCPU core‚ª`wfe`‚Å‰ñ‚Á‚Ä‚¢‚é‚±‚Æ‚ğŠm”F‚·‚éD
+project folderã«ã¦ï¼ŒQEMUã‚’å‘¼ã³å‡ºã—ã¦CPU coreãŒ`wfe`ã§å›ã£ã¦ã„ã‚‹ã“ã¨ã‚’ç¢ºèªã™ã‚‹ï¼
 
 ```console
 $ make qemu

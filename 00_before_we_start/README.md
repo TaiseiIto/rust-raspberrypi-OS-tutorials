@@ -1,5 +1,5 @@
 # Before we start
-# n‚ß‚é‘O‚É
+# å§‹ã‚ã‚‹å‰ã«
 
 The following text is a 1:1 copy of the documentation that can be found at the top of the kernel's
 main source code file in each tutorial. It describes the general structure of the source code, and
@@ -7,33 +7,33 @@ tries to convey the philosophy behind the respective approach. Please read it to
 familiar with what you will encounter during the tutorials. It will help you to navigate the code
 better and understand the differences and additions between the separate tutorials.
 
-ˆÈ‰º‚Ì•¶Í‚ÍŠetutorial‚Ìkernel‚Ìmain source code file‚Ìæ“ª•”•ª‚Ì•¡»‚¾D‚»‚Ìsource code‚Ì‘å‚Ü‚©‚È\‘¢‚ğq‚×CŠeè–@‚Ì”wŒã‚É‚ ‚év‘z‚ğ“`‚¦‚éD‚±‚Ìtutorials‚Åæ‚è‘g‚Ş‚±‚Æ‚ÉŠµ‚ê‚é‚½‚ß‚É“Ç‚ñ‚Å‚­‚¾‚³‚¢DŠetutorial‚Ìcode‚ğ“Ç‚İ·•ª‚Æ’Ç‰Á•”•ª‚ğ—‰ğ‚·‚é•‚¯‚É‚È‚é‚Å‚µ‚å‚¤D
+ä»¥ä¸‹ã®æ–‡ç« ã¯å„tutorialã®kernelã®main source code fileã®å…ˆé ­éƒ¨åˆ†ã®è¤‡è£½ã ï¼ãã®source codeã®å¤§ã¾ã‹ãªæ§‹é€ ã‚’è¿°ã¹ï¼Œå„æ‰‹æ³•ã®èƒŒå¾Œã«ã‚ã‚‹æ€æƒ³ã‚’ä¼ãˆã‚‹ï¼ã“ã®tutorialsã§å–ã‚Šçµ„ã‚€ã“ã¨ã«æ…£ã‚Œã‚‹ãŸã‚ã«èª­ã‚“ã§ãã ã•ã„ï¼å„tutorialã®codeã‚’èª­ã¿å·®åˆ†ã¨è¿½åŠ éƒ¨åˆ†ã‚’ç†è§£ã™ã‚‹åŠ©ã‘ã«ãªã‚‹ã§ã—ã‚‡ã†ï¼
 
 Please also note that the following text will reference source code files (e.g. `**/memory.rs`) or
 functions that won't exist yet in the first bunch of the tutorials. They will be added gradually as
 the tutorials advance.
 
-ˆÈ‰º‚Ì•¶Í‚Í`**/memory.rs`“™‚Ìsource code‚âC‚Ü‚¾‘¶İ‚µ‚È‚¢ŠÖ”‚ğQÆ‚µ‚Ä‚¢‚é‚±‚Æ‚É—¯ˆÓ‚µ‚Ä‚­‚¾‚³‚¢D‚±‚ê‚ç‚Ítutorials‚ği‚ß‚Ä‚¢‚­‚É‚µ‚½‚ª‚Á‚Ä’iŠK“I‚É‰Á‚¦‚ç‚ê‚Ä‚¢‚«‚Ü‚·D
+ä»¥ä¸‹ã®æ–‡ç« ã¯`**/memory.rs`ç­‰ã®source codeã‚„ï¼Œã¾ã å­˜åœ¨ã—ãªã„é–¢æ•°ã‚’å‚ç…§ã—ã¦ã„ã‚‹ã“ã¨ã«ç•™æ„ã—ã¦ãã ã•ã„ï¼ã“ã‚Œã‚‰ã¯tutorialsã‚’é€²ã‚ã¦ã„ãã«ã—ãŸãŒã£ã¦æ®µéšçš„ã«åŠ ãˆã‚‰ã‚Œã¦ã„ãã¾ã™ï¼
 
 Have fun!
 
 # Code organization and architecture
-# code‚Ì‘gD‚Æ\¬
+# codeã®çµ„ç¹”ã¨æ§‹æˆ
 
 The code is divided into different *modules*, each representing a typical **subsystem** of the
 `kernel`. Top-level module files of subsystems reside directly in the `src` folder. For example,
 `src/memory.rs` contains code that is concerned with all things memory management.
 
-‚±‚Ìcode‚Í‚»‚ê‚¼‚ê‚ªkernel‚Ìsubsystem‚ğ‹Lq‚·‚é•¡”‚Ìmodules‚É•ªŠ„‚³‚ê‚Ü‚·Dsubsystems‚ÌÅãˆÊ‚Ìmodule files‚Ísrc folder‚Ì’¼‰º‚É‚ ‚è‚Ü‚·D—á‚¦‚ÎC`src/memory.rs`‚ÍmemoryŠÇ—‚ÉŠÖ‚·‚é‘S‚Ä‚Ìcode‚ğŠÜ‚İ‚Ü‚·D
+ã“ã®codeã¯ãã‚Œãã‚ŒãŒkernelã®subsystemã‚’è¨˜è¿°ã™ã‚‹è¤‡æ•°ã®modulesã«åˆ†å‰²ã•ã‚Œã¾ã™ï¼subsystemsã®æœ€ä¸Šä½ã®module filesã¯src folderã®ç›´ä¸‹ã«ã‚ã‚Šã¾ã™ï¼ä¾‹ãˆã°ï¼Œ`src/memory.rs`ã¯memoryç®¡ç†ã«é–¢ã™ã‚‹å…¨ã¦ã®codeã‚’å«ã¿ã¾ã™ï¼
 
 ## Visibility of processor architecture code
-## processor architecture code‚Ì‰Â“Ç«
+## processor architecture codeã®å¯èª­æ€§
 
 Some of the `kernel`'s subsystems depend on low-level code that is specific to the target processor
 architecture. For each supported processor architecture, there exists a subfolder in `src/_arch`,
 for example, `src/_arch/aarch64`.
 
-`kernel`‚Ìsubsystems‚É‚Í‘ÎÛprocessor architecture‚²‚Æ‚Ì’á…€code‚ÉˆË‘¶‚·‚é‚à‚Ì‚ª‚ ‚éD`src/_arch`‚É‚Í‘Î‰‚·‚éprocessor architecture‚²‚Æ‚ÉCsubfolder‚ª‚ ‚éD
+`kernel`ã®subsystemsã«ã¯å¯¾è±¡processor architectureã”ã¨ã®ä½æ°´æº–codeã«ä¾å­˜ã™ã‚‹ã‚‚ã®ãŒã‚ã‚‹ï¼`src/_arch`ã«ã¯å¯¾å¿œã™ã‚‹processor architectureã”ã¨ã«ï¼ŒsubfolderãŒã‚ã‚‹ï¼
 
 The architecture folders mirror the subsystem modules laid out in `src`. For example, architectural
 code that belongs to the `kernel`'s MMU subsystem (`src/memory/mmu.rs`) would go into
@@ -41,7 +41,7 @@ code that belongs to the `kernel`'s MMU subsystem (`src/memory/mmu.rs`) would go
 using the `path attribute`. Usually, the chosen module name is the generic module's name prefixed
 with `arch_`.
 
-‚±‚ê‚ç‚Ìarchitecture folders‚Í`src`‚ÌŠO‚É’u‚©‚ê‚ésubsystem modules‚ğÊ‚µo‚·D—á‚¦‚ÎC`kernel`‚ÌMMU subsystem(`src/memory/mmu.rs`)‚É‘®‚·‚éarchitectural code‚ÍC`src/_arch/aarch64/memory/mmu.rs`‚É’Ê‚¶‚éDŒãÒ‚Ìfile‚Í`path attribute`‚ğg‚Á‚Ä`src/memory/mmy.rs`“à‚Ìmodule‚Æ‚µ‚Ä“Ç‚İ‚Ü‚ê‚éDˆê”Ê‚ÉC‘I‘ğ‚³‚ê‚½module–¼‚Íæ“ª‚É`arch_`‚ğ•t‚¯‚½•ïŠ‡module–¼‚¾D
+ã“ã‚Œã‚‰ã®architecture foldersã¯`src`ã®å¤–ã«ç½®ã‹ã‚Œã‚‹subsystem modulesã‚’å†™ã—å‡ºã™ï¼ä¾‹ãˆã°ï¼Œ`kernel`ã®MMU subsystem(`src/memory/mmu.rs`)ã«å±ã™ã‚‹architectural codeã¯ï¼Œ`src/_arch/aarch64/memory/mmu.rs`ã«é€šã˜ã‚‹ï¼å¾Œè€…ã®fileã¯`path attribute`ã‚’ä½¿ã£ã¦`src/memory/mmy.rs`å†…ã®moduleã¨ã—ã¦èª­ã¿è¾¼ã¾ã‚Œã‚‹ï¼ä¸€èˆ¬ã«ï¼Œé¸æŠã•ã‚ŒãŸmoduleåã¯å…ˆé ­ã«`arch_`ã‚’ä»˜ã‘ãŸåŒ…æ‹¬moduleåã ï¼
 
 For example, this is the top of `src/memory/mmu.rs`:
 
@@ -55,7 +55,7 @@ Often times, items from the `arch_ module` will be publicly reexported by the pa
 way, each architecture specific module can provide its implementation of an item, while the caller
 must not be concerned which architecture has been conditionally compiled.
 
-‚µ‚Î‚µ‚Î`arch_module`‚É—R—ˆ‚·‚éitem‚Íemodule‚É‚æ‚èpublic‚ÉÄo—Í‚³‚ê‚éD‚±‚Ì‚æ‚¤‚ÉCŒÄ‚Ño‚µ‘¤‚É‚Ç‚Ìarchitecture‚Åcompile‚³‚ê‚Ä‚¢‚é‚Ì‚©‹C‚ğŒ­‚í‚¹‚È‚¢‚½‚ß‚ÉCŠearchitectureŒÅ—L‚Ìmodule‚Íitem‚ÌÀ‘•‚ğ’ñ‹Ÿ‚·‚éD
+ã—ã°ã—ã°`arch_module`ã«ç”±æ¥ã™ã‚‹itemã¯è¦ªmoduleã«ã‚ˆã‚Špublicã«å†å‡ºåŠ›ã•ã‚Œã‚‹ï¼ã“ã®ã‚ˆã†ã«ï¼Œå‘¼ã³å‡ºã—å´ã«ã©ã®architectureã§compileã•ã‚Œã¦ã„ã‚‹ã®ã‹æ°—ã‚’é£ã‚ã›ãªã„ãŸã‚ã«ï¼Œå„architectureå›ºæœ‰ã®moduleã¯itemã®å®Ÿè£…ã‚’æä¾›ã™ã‚‹ï¼
 
 ## BSP code
 
@@ -63,13 +63,13 @@ must not be concerned which architecture has been conditionally compiled.
 target board specific definitions and functions. These are things such as the board's memory map or
 instances of drivers for devices that are featured on the respective board.
 
-`BPS`‚Æ‚ÍBoard Support Package‚Ì‚±‚Æ‚Å‚·D`BSP`‚Ìcode‚Í`src/bps.rs`ˆÈ‰º‚É\¬‚³‚êC‘ÎÛŠî”Õ•Ê‚Ì’è‹`‹y‚ÑŠÖ”‚ğŠÜ‚İ‚Ü‚·DŠî”Õmemory map‚âŠeŠî”Õ‚É“Á—L‚Ìdevice driver‚ÌÀ‘Ì‚È‚Ç‚ª‚ ‚è‚Ü‚·D
+`BPS`ã¨ã¯Board Support Packageã®ã“ã¨ã§ã™ï¼`BSP`ã®codeã¯`src/bps.rs`ä»¥ä¸‹ã«æ§‹æˆã•ã‚Œï¼Œå¯¾è±¡åŸºç›¤åˆ¥ã®å®šç¾©åŠã³é–¢æ•°ã‚’å«ã¿ã¾ã™ï¼åŸºç›¤memory mapã‚„å„åŸºç›¤ã«ç‰¹æœ‰ã®device driverã®å®Ÿä½“ãªã©ãŒã‚ã‚Šã¾ã™ï¼
 
 Just like processor architecture code, the `BSP` code's module structure tries to mirror the
 `kernel`'s subsystem modules, but there is no reexporting this time. That means whatever is provided
 must be called starting from the `bsp` namespace, e.g. `bsp::driver::driver_manager()`.
 
-processor architecture code‚Æ“¯—l‚ÉC`BPS` code‚Ìmodule\‘¢‚à`kernel`‚Ìsubsystem modules‚ğÊ‚µo‚µ‚Ü‚·‚ªC¡‰ñ‚ÍÄo—Í‚Í‚ ‚è‚Ü‚¹‚ñD‚Â‚Ü‚èC’ñ‹Ÿ‚³‚ê‚½‚à‚Ì‚Í`bps::driver::driver_manager()`‚Ì‚æ‚¤‚É•K‚¸bps–¼‘O‹óŠÔ‚©‚çŒÄ‚Ño‚³‚ê‚é‚Æ‚¢‚¤‚±‚Æ‚Å‚·D
+processor architecture codeã¨åŒæ§˜ã«ï¼Œ`BPS` codeã®moduleæ§‹é€ ã‚‚`kernel`ã®subsystem modulesã‚’å†™ã—å‡ºã—ã¾ã™ãŒï¼Œä»Šå›ã¯å†å‡ºåŠ›ã¯ã‚ã‚Šã¾ã›ã‚“ï¼ã¤ã¾ã‚Šï¼Œæä¾›ã•ã‚ŒãŸã‚‚ã®ã¯`bps::driver::driver_manager()`ã®ã‚ˆã†ã«å¿…ãšbpsåå‰ç©ºé–“ã‹ã‚‰å‘¼ã³å‡ºã•ã‚Œã‚‹ã¨ã„ã†ã“ã¨ã§ã™ï¼
 
 ## Kernel interfaces
 
@@ -78,7 +78,7 @@ board for which the kernel is compiled. For example, the `interrupt controller` 
 `Raspberry Pi 3` and the `Raspberry Pi 4` is different, but we want the rest of the `kernel` code to
 play nicely with any of the two without much hassle.
 
-`arch`‚Æ`bps`‚Í‘ÎÛarchitecture‚ÆŠî”Õ‚É]‚Á‚Äcompile‚³‚ê‚écode‚ğŠÜ‚İ‚Ü‚·D—á‚¦‚ÎC`Raspberry Pi 3`‚Æ`Raspberry Pi 4`‚ÌŠ„‚è‚İ§Œähardware‚ÍˆÙ‚È‚è‚Ü‚·‚ªC‰äX‚Í‚»‚Ì‚Ç‚¿‚ç‚Å‚à˜J—Í‚ğg‚í‚¸‚É“®‚©‚·‚½‚ß‚Ì`kernel` code‚Ì“y‘ä‚ğ•K—v‚Æ‚µ‚Ä‚¢‚Ü‚·D
+`arch`ã¨`bps`ã¯å¯¾è±¡architectureã¨åŸºç›¤ã«å¾“ã£ã¦compileã•ã‚Œã‚‹codeã‚’å«ã¿ã¾ã™ï¼ä¾‹ãˆã°ï¼Œ`Raspberry Pi 3`ã¨`Raspberry Pi 4`ã®å‰²ã‚Šè¾¼ã¿åˆ¶å¾¡hardwareã¯ç•°ãªã‚Šã¾ã™ãŒï¼Œæˆ‘ã€…ã¯ãã®ã©ã¡ã‚‰ã§ã‚‚åŠ´åŠ›ã‚’ä½¿ã‚ãšã«å‹•ã‹ã™ãŸã‚ã®`kernel` codeã®åœŸå°ã‚’å¿…è¦ã¨ã—ã¦ã„ã¾ã™ï¼
 
 In order to provide a clean abstraction between `arch`, `bsp` and `generic kernel code`, `interface`
 traits are provided *whenever possible* and *where it makes sense*. They are defined in the
@@ -87,7 +87,7 @@ implementation*. For example, there will be a common IRQ handling interface whic
 interrupt controller `drivers` of both Raspberrys will implement, and only export the interface to
 the rest of the `kernel`.
 
-`arch`C`bsp`C`generic kernel code`‚Ì’ŠÛ‰»‚ğ’ñ‹Ÿ‚·‚é‘ã‚í‚è‚ÉC`interface` traits‚ª‰Â”\‚ÈŒÀ‚è“¹—‚É‚©‚È‚¤‚æ‚¤‚É’ñ‹Ÿ‚³‚ê‚Ü‚·D‚±‚ê‚ç‚ÍŠesubsystem module‚Å’è‹`‚³‚êCprogram‚©‚ç’¼ÚÀ‘•‚Å‚Í‚È‚­interface‚ğ‰î‚µ‚½•\Œ»‚ğ‰Â”\‚É‚µ‚Ü‚·D—á‚¦‚ÎC2í—Ş‚ÌRaspberry‚»‚ê‚¼‚ê‚ÌŠ„‚è‚İ§ŒäŠídrivers‚Ö‚Ìˆê”ÊIRQˆ—interface‚ªÀ‘•‚³‚êCkernel‚Ì“y‘ä‚Ö‚Ìinterface‚Ì‚İ‚ªo—Í‚³‚ê‚é‚Å‚µ‚å‚¤D(‰¼‘z‰»‚É‚æ‚Á‚Ähardware‚Ìˆá‚¢‚ğ‰B•Á‚·‚é‚Æ‚¢‚¤‚±‚Æ‚©‚È)
+`arch`ï¼Œ`bsp`ï¼Œ`generic kernel code`ã®æŠ½è±¡åŒ–ã‚’æä¾›ã™ã‚‹ä»£ã‚ã‚Šã«ï¼Œ`interface` traitsãŒå¯èƒ½ãªé™ã‚Šé“ç†ã«ã‹ãªã†ã‚ˆã†ã«æä¾›ã•ã‚Œã¾ã™ï¼ã“ã‚Œã‚‰ã¯å„subsystem moduleã§å®šç¾©ã•ã‚Œï¼Œprogramã‹ã‚‰ç›´æ¥å®Ÿè£…ã§ã¯ãªãinterfaceã‚’ä»‹ã—ãŸè¡¨ç¾ã‚’å¯èƒ½ã«ã—ã¾ã™ï¼ä¾‹ãˆã°ï¼Œ2ç¨®é¡ã®Raspberryãã‚Œãã‚Œã®å‰²ã‚Šè¾¼ã¿åˆ¶å¾¡å™¨driversã¸ã®ä¸€èˆ¬IRQå‡¦ç†interfaceãŒå®Ÿè£…ã•ã‚Œï¼Œkernelã®åœŸå°ã¸ã®interfaceã®ã¿ãŒå‡ºåŠ›ã•ã‚Œã‚‹ã§ã—ã‚‡ã†ï¼(ä»®æƒ³åŒ–ã«ã‚ˆã£ã¦hardwareã®é•ã„ã‚’éš è”½ã™ã‚‹ã¨ã„ã†ã“ã¨ã‹ãª)
 
 ```
         +-------------------+
@@ -104,7 +104,7 @@ the rest of the `kernel`.
 ```
 
 # Summary
-# ‚Ü‚Æ‚ß
+# ã¾ã¨ã‚
 
 For a logical `kernel` subsystem, corresponding code can be distributed over several physical
 locations. Here is an example for the **memory** subsystem:
@@ -127,33 +127,33 @@ From a namespace perspective, **memory** subsystem code lives in:
 - `crate::memory::*`
 - `crate::bsp::memory::*`
 
-˜_—`kernel` subsystem‚Ì‚½‚ßC‘Î‰‚·‚écode‚ÍŠô‚Â‚©‚ÌêŠ‚É•ª”z‚³‚ê‚Ü‚·D**memory** subsystem‚Ì—á‚ğ¦‚µ‚Ü‚·D
+è«–ç†`kernel` subsystemã®ãŸã‚ï¼Œå¯¾å¿œã™ã‚‹codeã¯å¹¾ã¤ã‹ã®å ´æ‰€ã«åˆ†é…ã•ã‚Œã¾ã™ï¼**memory** subsystemã®ä¾‹ã‚’ç¤ºã—ã¾ã™ï¼
 
-- `src/memory.rs`‚Æ`src/memory/**/*`
-  - •s‰Â’m‚È‘ÎÛprocessor architecture‚Æ`BPS`“Á«‚É‹¤’Êcode‚Å‚·D
-    - —á:‚Ğ‚Æ‚Ü‚Æ‚Ü‚è‚Ìmemory—Ìˆæ‚ğ0”Ô’n‚É‡‚í‚¹‚é‚½‚ß‚ÌŠÖ”
-  - `arch`‚â`BSP`‚Ìcode‚ÅÀ‘•‚³‚ê‚½memory subsystem‚Ìinterfaces
-    - —á:`MMU`ŠÖ”‚ÌprototypeéŒ¾‚ğ’è‹`‚·‚é`MMU`interface
-- `src/bps/__board_name__/memory.rs`‚Æ`src/bps/__board_name__/memory/**/*`
-  - `BPS`•Ê‚Ìcode
-  - —á:‘ÎÛŠî”Õ‚Ìmemory map (DRAM‚ÆMMIO‹@Ší‚Ì•¨—”Ô’n)
-- `src/_arch/__arch_name__/memory.rs`‚Æ`src/_arch/__arch_name__/memory/**/*`
-  - Processor architecture•Ê‚Ìcode
-  - —á:`__arch_name__` processorŒü‚¯‚Ì`MMU` interface‚ÌÀ‘•
+- `src/memory.rs`ã¨`src/memory/**/*`
+  - ä¸å¯çŸ¥ãªå¯¾è±¡processor architectureã¨`BPS`ç‰¹æ€§ã«å…±é€šcodeã§ã™ï¼
+    - ä¾‹:ã²ã¨ã¾ã¨ã¾ã‚Šã®memoryé ˜åŸŸã‚’0ç•ªåœ°ã«åˆã‚ã›ã‚‹ãŸã‚ã®é–¢æ•°
+  - `arch`ã‚„`BSP`ã®codeã§å®Ÿè£…ã•ã‚ŒãŸmemory subsystemã®interfaces
+    - ä¾‹:`MMU`é–¢æ•°ã®prototypeå®£è¨€ã‚’å®šç¾©ã™ã‚‹`MMU`interface
+- `src/bps/__board_name__/memory.rs`ã¨`src/bps/__board_name__/memory/**/*`
+  - `BPS`åˆ¥ã®code
+  - ä¾‹:å¯¾è±¡åŸºç›¤ã®memory map (DRAMã¨MMIOæ©Ÿå™¨ã®ç‰©ç†ç•ªåœ°)
+- `src/_arch/__arch_name__/memory.rs`ã¨`src/_arch/__arch_name__/memory/**/*`
+  - Processor architectureåˆ¥ã®code
+  - ä¾‹:`__arch_name__` processorå‘ã‘ã®`MMU` interfaceã®å®Ÿè£…
 
-–¼‘O‹óŠÔ‚Ìl‚¦•û‚©‚çC**memory** subsystem code‚Í
+åå‰ç©ºé–“ã®è€ƒãˆæ–¹ã‹ã‚‰ï¼Œ**memory** subsystem codeã¯
 
 - `crate::memory::*`
 - `crate::bsp::memory::*`
 
-‚É‚ ‚è‚Ü‚·D
+ã«ã‚ã‚Šã¾ã™ï¼
 
 # Boot flow
-# ‹N“®‚Ì—¬‚ê
+# èµ·å‹•ã®æµã‚Œ
 
 1. The kernel's entry point is the function `cpu::boot::arch_boot::_start()`.
     - It is implemented in `src/_arch/__arch_name__/cpu/boot.s`.
 
-1. kernel‚Ìn“_‚Í`cpu::boot::arch_boot::_start()`ŠÖ”‚Å‚·D
-    - ‚±‚ê‚Í`src/_arch/__arch_name__/cpu/boot.s`‚ÉÀ‘•‚³‚ê‚Ä‚¢‚Ü‚·D
+1. kernelã®å§‹ç‚¹ã¯`cpu::boot::arch_boot::_start()`é–¢æ•°ã§ã™ï¼
+    - ã“ã‚Œã¯`src/_arch/__arch_name__/cpu/boot.s`ã«å®Ÿè£…ã•ã‚Œã¦ã„ã¾ã™ï¼
 
