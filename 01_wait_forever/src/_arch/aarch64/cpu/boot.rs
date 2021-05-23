@@ -12,4 +12,6 @@
 //! crate::cpu::boot::arch_boot
 
 // Assembly counterpart to this file.
+// boot.sのassemblyをこのrustにincludeする的な?
+// そうするとこのfileからboot.sで定義されたsymbolを使えるようになる的な?
 global_asm!(include_str!("boot.s"));

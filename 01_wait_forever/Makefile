@@ -5,6 +5,7 @@
 include ../utils/color.mk.in
 
 # Default to the RPi3
+# raspberry piのversion選択
 BSP ?= rpi3
 
 # BSP-specific arguments
@@ -66,12 +67,15 @@ EXEC_QEMU = $(QEMU_BINARY) -M $(QEMU_MACHINE_TYPE)
 
 .PHONY: all $(KERNEL_ELF) $(KERNEL_BIN) doc qemu clippy clean readelf objdump nm check
 
+# OSのimage file
 all: $(KERNEL_BIN)
 
+#compile?
 $(KERNEL_ELF):
 	$(call colorecho, "\nCompiling kernel - $(BSP)")
 	@RUSTFLAGS="$(RUSTFLAGS_PEDANTIC)" $(RUSTC_CMD)
 
+#link?
 $(KERNEL_BIN): $(KERNEL_ELF)
 	@$(OBJCOPY_CMD) $(KERNEL_ELF) $(KERNEL_BIN)
 

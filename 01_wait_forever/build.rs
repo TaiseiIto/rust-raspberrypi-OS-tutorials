@@ -1,3 +1,6 @@
+// 謎
+// raspberry piで実行されるcodeというよりもlink関連の処理っぽい
+
 use std::env;
 
 fn main() {
