@@ -1,12 +1,17 @@
-# Tutorial 02 - Runtime Init
+# Tutorial 02 - Runtime Init 実行時初期化
 
-## tl;dr
+## tl;dr 要約
 
 - We extend `boot.s` to call into Rust code for the first time. There, we zero the [bss] section
   before execution is halted with a call to `panic()`.
 - Check out `make qemu` again to see the additional code run.
 
+- 最初にRust codeを呼び出すために`boot.s`を拡張する．`panic()`が呼び出されて実行が停止する前に[bss] 領域を0で初期化する
+- bss (Block Starting Symbol) : プログラムの開始から終了までずっと存在し続けるグローバル変数や関数内static変数のうち、プログラムで明示的に初期化されない変数たちが置かれる領域のことらしい．
+- `make qemu`を実行して追加codeが実行されていることを確認しよう．
+
 ## Notable additions
+## 追加で見るべきところ
 
 - More additions to the linker script:
      - New sections: `.rodata`, `.got`, `.data`, `.bss`.
@@ -21,6 +26,20 @@
 - The library now uses the [cortex-a] crate, which provides zero-overhead abstractions and wraps
   `unsafe` parts when dealing with the CPU's resources.
     - See it in action in `_arch/__arch_name__/cpu.rs`.
+
+- linker scriptへの追加:
+     - 新しいsection: `.rodata`, `.got`, `.data`, `.bss`.
+     - `_start()`で読み込まれる必要のあるlinking boot-time引数の専用の場所
+     - linking boot-time引数ってなんだ?
+- `_arch/__arch_name__/cpu/boot.s`の`_start()`:
+     1. core0以外のcoreを停止する
+     1. `stack pointer`の設定
+     1. `arch/__arch_name__/cpu/boot.rs`で定義されている`_start_rust()`関数に飛ぶ
+- `runtime_init.rs`の`runtime_init()`
+     - `.bss`領域を0で初期化する．
+     - core0を停止させる`panic!()`を呼び出す`kernel_init()`を呼び出す．
+- libraryはCPUの資源を使った処理においてoverheadのない抽象化を提供し，`unsafe`部分をwrapする[cortex-a] crateを使っている．
+     - `_arch/__arch_name__/cpu.rs`の動きを見よ．
 
 [bss]: https://en.wikipedia.org/wiki/.bss
 [cortex-a]: https://github.com/rust-embedded/cortex-a
