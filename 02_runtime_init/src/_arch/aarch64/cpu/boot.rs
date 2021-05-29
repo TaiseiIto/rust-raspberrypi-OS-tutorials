@@ -21,13 +21,14 @@ global_asm!(include_str!("boot.s"));
 //--------------------------------------------------------------------------------------------------
 
 /// The Rust entry of the `kernel` binary.
-///
+/// Rustの開始地点
 /// The function is called from the assembly `_start` function.
-///
+/// ./boot.sの_startからboot coreだけがここに飛んでくる
 /// # Safety
 ///
 /// - The `bss` section is not initialized yet. The code must not use or reference it in any way.
 #[no_mangle]
 pub unsafe fn _start_rust() -> ! {
+    //../../runtime_init.rsへ
     runtime_init::runtime_init()
 }

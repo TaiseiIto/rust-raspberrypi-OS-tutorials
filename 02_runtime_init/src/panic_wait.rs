@@ -7,7 +7,9 @@
 use crate::cpu;
 use core::panic::PanicInfo;
 
+/// main.rsのkernel_initからここに飛ぶ
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
+    /// ./_arch/aarch64/cpu.rsのwait_foreverに飛ぶ
     cpu::wait_forever()
 }

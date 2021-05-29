@@ -117,10 +117,11 @@ mod panic_wait;
 mod runtime_init;
 
 /// Early init code.
-///
+/// ./runtime_init.rsのruntime_initから呼び出される
 /// # Safety
 ///
 /// - Only a single core must be active and running this function.
 unsafe fn kernel_init() -> ! {
+    /// panic_wait.rsのpanicに飛ぶ．
     panic!()
 }

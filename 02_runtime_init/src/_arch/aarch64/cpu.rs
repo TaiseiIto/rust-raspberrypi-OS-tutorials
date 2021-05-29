@@ -18,9 +18,12 @@ use cortex_a::asm;
 //--------------------------------------------------------------------------------------------------
 
 /// Pause execution on the core.
+/// ../../panic_wait.rsのpanicからここに飛ぶ
 #[inline(always)]
 pub fn wait_forever() -> ! {
+    /// 無限loop
     loop {
+        /// wait for event
         asm::wfe()
     }
 }
