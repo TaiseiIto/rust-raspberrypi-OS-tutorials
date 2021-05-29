@@ -122,6 +122,6 @@ mod runtime_init;
 ///
 /// - Only a single core must be active and running this function.
 unsafe fn kernel_init() -> ! {
-    /// panic_wait.rsのpanicに飛ぶ．
+    // panic_wait.rsのpanicに飛ぶ．
     panic!()
 }

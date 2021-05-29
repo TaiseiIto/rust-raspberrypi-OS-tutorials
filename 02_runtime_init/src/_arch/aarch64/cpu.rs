@@ -21,9 +21,9 @@ use cortex_a::asm;
 /// ../../panic_wait.rsのpanicからここに飛ぶ
 #[inline(always)]
 pub fn wait_forever() -> ! {
-    /// 無限loop
+    // 無限loop
     loop {
-        /// wait for event
+        // wait for event
         asm::wfe()
     }
 }

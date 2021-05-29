@@ -18,8 +18,8 @@ use crate::{bsp, memory};
 /// - 下のkernel_init()から呼び出される
 #[inline(always)]
 unsafe fn zero_bss() {
-    /// .bssの領域をrangeで指定して./memory.rsの0埋め関数を呼ぶ．
-    /// ./src/raspberrypi/memory.rsのbss_range_inclusive関数が.bss領域を返すようになってる．
+    // .bssの領域をrangeで指定して./memory.rsの0埋め関数を呼ぶ．
+    // ./src/raspberrypi/memory.rsのbss_range_inclusive関数が.bss領域を返すようになってる．
     memory::zero_volatile(bsp::memory::bss_range_inclusive());
 }
 
@@ -35,8 +35,8 @@ unsafe fn zero_bss() {
 ///
 /// - Only a single core must be active and running this function.
 pub unsafe fn runtime_init() -> ! {
-    ///bssを0埋め
+    // bssを0埋め
     zero_bss();
-    /// ./main.rsのkernel_initへ飛ぶ
+    // ./main.rsのkernel_initへ飛ぶ
     crate::kernel_init()
 }

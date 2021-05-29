@@ -23,7 +23,7 @@ where
 {
     let mut ptr = *range.start();
     let end_inclusive = *range.end();
-    ///rangeのstartからendまで0埋め
+    // rangeのstartからendまで0埋め
     while ptr <= end_inclusive {
         core::ptr::write_volatile(ptr, T::from(0));
         ptr = ptr.offset(1);
