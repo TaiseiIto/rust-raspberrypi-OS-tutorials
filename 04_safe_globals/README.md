@@ -6,20 +6,35 @@
 - It is a first showcase of OS synchronization primitives and enables safe access to a global data
   structure.
 
+- 疑似lockの導入
+- OSにおける同期primitive型の最初のshowcaseで，globalなdata構造への安全なaccessを可能にする
+
 ## Mutable globals in Rust
 
 When we introduced the globally usable `print!` macros in [tutorial 03], we cheated a bit. Calling
 `core::fmt`'s `write_fmt()` function, which takes an `&mut self`, was only working because on each
 call, a new instance of `QEMUOutput` was created.
 
+globalに使用できる`print!` macroを前回の[tutorial 03]で導入したとき，少しごまかしをした．
+`core::fmt`の`write_fmt()`関数の呼び出しにおいて，呼び出されるごとに`QEMUOutput`の実体が生成されるので，
+`&mut self`(selfはC++のthis的な?実体をいじっていい的な?)は意味をなしていなかった．
+
 If we would want to preserve some state, e.g. statistics about the number of characters written, we
 need to make a single global instance of `QEMUOutput` (in Rust, using the `static` keyword).
+
+出力された文字の数を知りたい場合など，状態を保存したければ，`QEMUOutput`の単一のglobalな実体を作る必要がある．
+(Rustでは`static`修飾子を使う．)
 
 A `static QEMU_OUTPUT`, however, would not allow to call functions taking `&mut self`. For that, we
 would need a `static mut`, but calling functions that mutate state on `static mut`s is unsafe. The
 Rust compiler's reasoning for this is that it can then not prevent anymore that multiple
 cores/threads are mutating the data concurrently (it is a global, so everyone can reference it from
 anywhere. The borrow checker can't help here).
+
+しかし`static QEMU_OUTPUT`はいじっちゃいけないので`&mut self`で関数を呼び出すことができない．
+だから`static mut`が必要になるのだが，これで状態を変更する関数を呼ぶのはunsafeだ．
+Rust compilerがこのようにしているのは，状態を変更できてしまうと複数のcores/threadsが同時に同じものに対して変更を加えることができてしまうからだ．
+(globalなものはみんながどこからでも参照でき，borrow checkerはここを管理できない．)
 
 The solution to this problem is to wrap the global into a synchronization primitive. In our case, a
 variant of a *MUTual EXclusion* primitive. `Mutex` is introduced as a trait in `synchronization.rs`,
@@ -28,12 +43,24 @@ purposes, it leaves out the actual architecture-specific logic for protection ag
 access, since we don't need it as long as the kernel only executes on a single core with interrupts
 disabled.
 
+この問題の解決策はglobalなものを同期primitive型で包むことだ．
+この場合，*MUTual EXclusion* primitive型だ．
+`Mutex`は`synchronization.rs`のtaitとして導入され，同じく`synchronization.rs`の`NullLock`によって実装させる．
+これはあくまで教育目的のためcodeを小さくしたいし，単一coreだけで割り込みもなくkernelを実行する間は必要ないので，
+同時accessを防ぐためのarchitecture固有のlogicからは離れる．
+
 The `NullLock` focuses on showcasing the Rust core concept of [interior mutability]. Make sure to
 read up on it. I also recommend to read this article about an [accurate mental model for Rust's
 reference types].
 
+`NullLock`はRustの[interior mutability]内部変更可能性?の考え方に注目する．
+読んでみよう．
+[accurate mental model for Rust's reference types]も読むことをお勧めする．
+
 If you want to compare the `NullLock` to some real-world mutex implementations, you can check out
 implemntations in the [spin crate] or the [parking lot crate].
+
+`NullLock`を実際のmutex実装と比較は，[spin crate]と[parking lot crate]で確認できる．
 
 [tutorial 03]: ../03_hacky_hello_world
 [interior mutability]: https://doc.rust-lang.org/std/cell/index.html
