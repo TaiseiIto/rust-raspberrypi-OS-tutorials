@@ -18,6 +18,7 @@ use cortex_a::asm;
 //--------------------------------------------------------------------------------------------------
 
 /// Pause execution on the core.
+// ../../panic_wait.rsのpanicからここに飛ぶよ．wait for event命令を無限loopさせることによってcpuを停止させるよ．
 #[inline(always)]
 pub fn wait_forever() -> ! {
     loop {
