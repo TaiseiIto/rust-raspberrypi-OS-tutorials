@@ -7,9 +7,9 @@
 //--------------------------------------------------------------------------------------------------
 
 // Load the address of a symbol into a register, PC-relative.
-//
+// symbolのProgram Counter相対addressをregisterに読み込む疑似命令をここで定義するよ．
 // The symbol must lie within +/- 4 GiB of the Program Counter.
-//
+// addressはPC相対だから，PC +/- 4 GiBでなければならないよ．
 // # Resources
 //
 // - https://sourceware.org/binutils/docs-2.36/as/AArch64_002dRelocations.html
@@ -18,35 +18,36 @@
 	add	\register, \register, #:lo12:\symbol
 .endm
 
-.equ _core_id_mask, 0b11
+.equ _core_id_mask, 0b11 /* 自分のcore番号を取得するためのmask */
 
 //--------------------------------------------------------------------------------------------------
 // Public Code
 //--------------------------------------------------------------------------------------------------
-.section .text._start
+.section .text._start /* ここをentry pointにすることが../../bsp/raspberrypi/link.ldに記述されてるよ． */
 
 //------------------------------------------------------------------------------
 // fn _start()
 //------------------------------------------------------------------------------
-_start:
+_start: /* entry pointに_start関数を配置するよ． */
 	// Only proceed on the boot core. Park it otherwise.
+	// 自分のcore番号を取得するよ
 	mrs	x1, MPIDR_EL1
 	and	x1, x1, _core_id_mask
 	ldr	x2, BOOT_CORE_ID      // provided by bsp/__board_name__/cpu.rs
-	cmp	x1, x2
+	cmp	x1, x2				  // BOOT_CORE_ID番目のcore以外は1に飛んで停止するよ．
 	b.ne	1f
 
 	// If execution reaches here, it is the boot core. Now, prepare the jump to Rust code.
-
+	// boot coreのみが以下の命令を実行するよ．
 	// Set the stack pointer.
-	ADR_REL	x0, __boot_core_stack_end_exclusive
+	ADR_REL	x0, __boot_core_stack_end_exclusive // ../../../bsp/raspberrypi/link.ldで定義されているstackの底
 	mov	sp, x0
 
 	// Jump to Rust code.
-	b	_start_rust
+	b	_start_rust // ./boot.rsで定義されているRustのentry pointに飛ぶよ．
 
 	// Infinitely wait for events (aka "park the core").
-1:	wfe
+1:	wfe	//boot coreでないcoreはここでwait for event無限loopで停止するよ
 	b	1b
 
 .size	_start, . - _start

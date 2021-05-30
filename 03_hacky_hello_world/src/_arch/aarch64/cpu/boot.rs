@@ -11,23 +11,24 @@
 //!
 //! crate::cpu::boot::arch_boot
 
-use crate::runtime_init;
+use crate::runtime_init; // ../../../runtime_init.rsを使うよ．
 
 // Assembly counterpart to this file.
-global_asm!(include_str!("boot.s"));
+global_asm!(include_str!("boot.s")); // ./boot.sを取り込むよ．
 
 //--------------------------------------------------------------------------------------------------
 // Public Code
 //--------------------------------------------------------------------------------------------------
 
 /// The Rust entry of the `kernel` binary.
-///
+/// boot coreが最初に実行するRustのentry pointだよ．
 /// The function is called from the assembly `_start` function.
-///
+/// ./boot.sの_start関数からここに飛ぶよ．
 /// # Safety
 ///
 /// - The `bss` section is not initialized yet. The code must not use or reference it in any way.
+/// `bss`領域がまだ初期化されていないので，ここで`bss`領域を使っちゃいけないよ．
 #[no_mangle]
 pub unsafe fn _start_rust() -> ! {
-    runtime_init::runtime_init()
+    runtime_init::runtime_init() // ../../../runtime_init.rsのruntime_initに飛ぶよ．
 }

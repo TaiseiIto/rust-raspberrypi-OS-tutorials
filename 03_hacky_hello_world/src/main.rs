@@ -121,12 +121,12 @@ mod print;
 mod runtime_init;
 
 /// Early init code.
-///
+/// runtime_init.rsのruntime_initからここに飛ぶよ．
 /// # Safety
 ///
 /// - Only a single core must be active and running this function.
 unsafe fn kernel_init() -> ! {
-    println!("[0] Hello from Rust!");
+    println!("[0] Hello from Rust!"); // print.rsのprintlnに飛ぶよ．QEMUの簡易UARTで文字列を表示するよ．
 
-    panic!("Stopping here.")
+    panic!("Stopping here.") // panic_wait.rsのpanicに飛ぶよ．error messageを表示して停止するよ．
 }

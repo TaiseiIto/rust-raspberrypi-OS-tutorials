@@ -19,7 +19,7 @@ pub fn _print(args: fmt::Arguments) {
 }
 
 /// Prints without a newline.
-///
+/// QEMUの簡易UARTで改行なしで表示するよ．
 /// Carbon copy from <https://doc.rust-lang.org/src/std/macros.rs.html>
 #[macro_export]
 macro_rules! print {
@@ -27,7 +27,7 @@ macro_rules! print {
 }
 
 /// Prints with a newline.
-///
+/// QEMUの簡易UARTで1行表示するよ．
 /// Carbon copy from <https://doc.rust-lang.org/src/std/macros.rs.html>
 #[macro_export]
 macro_rules! println {
