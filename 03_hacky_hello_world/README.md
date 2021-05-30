@@ -7,15 +7,25 @@
   us use the Raspberry's `UART` without setting it up properly.
 - Using the real hardware `UART` is enabled step-by-step in following tutorials.
 
+- 開発初期の"printf debugging"を可能にするための`print!()` macroの導入
+- tutorialの長さを適当に保つため，今は正確な設定なしにRaspberryの`UART`を使用可能にするQEMUのpropertyを乱用して関数を表示する．
+- 実機における`UART`の使用は後のtutorialsで段階的に可能になる．
+
 ## Notable additions
 
 - `src/console.rs` introduces interface `Traits` for console commands.
 - `src/bsp/raspberrypi/console.rs` implements the interface for QEMU's emulated UART.
 - The panic handler makes use of the new `print!()` to display user error messages.
 
+- `src/console.rs`はconsole comands向けのinterfacesの`Traits`を導入する．
+- `src/bsp/raspberrypi/console.rs`はQEMUでemulateされるUART向けのinterfaceを実装する．
+- The panic handlerから`print!()`が呼び出され，userにerror messageが表示される．
+
 ## Test it
 
 QEMU is no longer running in assembly mode. It will from now on show the output of the `console`.
+
+QEMUはこれ以降assembly modeでは走らない．これからは`console`の出力を表示する．
 
 ```console
 $ make qemu
