@@ -127,11 +127,13 @@ mod synchronization;
 /// # Safety
 ///
 /// - Only a single core must be active and running this function.
+/// - 単一のcoreのみがこの関数を実行するよ．
 unsafe fn kernel_init() -> ! {
-    use console::interface::Statistics;
+    use console::interface::Statistics; // console.rs
 
-    println!("[0] Hello from Rust!");
+    println!("[0] Hello from Rust!"); // とりあえず文字列出力
 
+    // 今までに出力した文字数を出力
     println!(
         "[1] Chars written: {}",
         bsp::console::console().chars_written()

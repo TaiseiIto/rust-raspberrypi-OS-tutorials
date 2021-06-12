@@ -21,7 +21,8 @@ extern "Rust" {
 //--------------------------------------------------------------------------------------------------
 
 /// Return the inclusive range spanning the .bss section.
-///
+/// bss領域を定義しているよ．
+/// 始点__bss_startと終点__bss_end_inclusiveは./link.ldで定義されているよ．
 /// # Safety
 ///
 /// - Values are provided by the linker script and must be trusted as-is.

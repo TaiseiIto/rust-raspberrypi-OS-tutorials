@@ -11,7 +11,7 @@ use core::ops::RangeInclusive;
 //--------------------------------------------------------------------------------------------------
 
 /// Zero out an inclusive memory range.
-///
+/// メモリ領域[range.start(), range.end()]を0で初期化するよ．
 /// # Safety
 ///
 /// - `range.start` and `range.end` must be valid.
