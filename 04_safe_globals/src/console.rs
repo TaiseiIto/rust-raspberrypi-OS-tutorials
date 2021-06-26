@@ -9,19 +9,19 @@
 //--------------------------------------------------------------------------------------------------
 
 /// Console interfaces.
-/// Consoleが実装すべきinterfaces
+/// Consoleが実装すべきinterfacesを記述したmodule
 pub mod interface {
-    use core::fmt;
+    use core::fmt; // 書式出力のmodule
 
     /// Console write functions.
-    /// Consoleへの書き込み
+    /// Consoleへの書き込みの関数たち
     pub trait Write {
         /// Write a Rust format string.
         fn write_fmt(&self, args: fmt::Arguments) -> fmt::Result;
     }
 
     /// Console statistics.
-    /// 出力した文字数を数えるよ．
+    /// 出力した文字数を返すよ．
     pub trait Statistics {
         /// Return the number of characters written.
         fn chars_written(&self) -> usize {
@@ -31,5 +31,6 @@ pub mod interface {
 
     /// Trait alias for a full-fledged console.
     /// 上の2つのtraitsを合わせたalias
+    /// これらのtraitsはbsp/raspberrypi/console.rsで実装されている
     pub trait All = Write + Statistics;
 }

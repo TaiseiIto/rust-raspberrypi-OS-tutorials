@@ -18,13 +18,14 @@ use core::ops::RangeInclusive;
 /// - `range.start` and `range.end` must be `T` aligned.
 pub unsafe fn zero_volatile<T>(range: RangeInclusive<*mut T>)
 where
-    T: From<u8>,
+    T: From<u8>, // From trait(u8からキャスト可能)を実装した型T
 {
-    let mut ptr = *range.start();
-    let end_inclusive = *range.end();
+    let mut ptr = *range.start(); // 0を書き込むためのポインタ
+    let end_inclusive = *range.end(); // 初期化範囲の終点
 
     while ptr <= end_inclusive {
-        core::ptr::write_volatile(ptr, T::from(0));
-        ptr = ptr.offset(1);
+        // write_volatileはコンパイラの最適化で消されたり順序が変更されることのないwrite
+        core::ptr::write_volatile(ptr, T::from(0)); // u8型の0をT型に変換したやつをptrに書き込む
+        ptr = ptr.offset(1); // ポインタを進める
     }
 }
