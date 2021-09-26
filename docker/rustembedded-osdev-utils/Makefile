@@ -9,3 +9,16 @@ docker_build:
 	docker build -t rustembedded/osdev-utils \
 	--build-arg VCS_REF=`git rev-parse --short HEAD` .
 	rm Gemfile
+
+docker_login:
+	docker attach rustembedded
+
+docker_run:
+	docker run --name rustembedded -i -t rustembedded/osdev-utils
+
+docker_start:
+	docker start rustembedded
+
+docker_stop:
+	docker stop rustembedded
+
