@@ -1,10 +1,14 @@
 # Tutorial 10 - Virtual Memory Part 1: Identity Map All The Things!
+# 項目10 - 仮想memory第1部 : 全ての恒等写像!
 
 ## tl;dr
 
-- The `MMU` is turned on.
+- The `MMU (Memory Management Unit)` is turned on.
+- 記憶領域管理機構を起動する．
 - A simple scheme is used: Static `64 KiB` translation tables.
+- `64KiB`置換表という簡単な方法が使われる．
 - For educational purposes, we write to a remapped `UART`, and `identity map` everything else.
+- 学習のため，対応付けられた`UART`と，その他全ての恒等写像に書き込む．
 
 ## Table of Contents
 
@@ -22,27 +26,36 @@
 - [Diff to previous](#diff-to-previous)
 
 ## Introduction
+## 導入
 
 Virtual memory is an immensely complex, but important and powerful topic. In this tutorial, we start
 slow and easy by switching on the `MMU`, using static translation tables and `identity-map`
 everything at once (except for the `UART`, which we also remap a second time for educational
 purposes; This will be gone again in the next tutorial).
 
+仮想記憶域はとても複雑だが，重要で興味深い話題だ．この項目では，MMU(Memory Management Unit 記憶領域管理機構)を起動し，静的置換表を使い，全てを恒等写像で対応付ける簡単なものから始める．(但し学習のため2回目に対応付ける`UART`は除く．これは次の項目でなされる．)
+
 ## MMU and paging theory
+## MMUとpaging理論
 
 At this point, we will not re-invent the wheel and go into detailed descriptions of how paging in
 modern application-grade processors works. The internet is full of great resources regarding this
 topic, and we encourage you to read some of it to get a high-level understanding of the topic.
 
+この点において，車輪の再発明はせず，現代のapplication層でpagingがどのように動くかについての詳細な記述に進む．Internetはこの話題について多くの情報を持っており，深い理解のためにいくつか読んでみることを推奨する．
+
 To follow the rest of this `AArch64` specific tutorial, I strongly recommend that you stop right
 here and first read `Chapter 12` of the [ARM Cortex-A Series Programmer's Guide for ARMv8-A] before
 you continue. This will set you up with all the `AArch64`-specific knowledge needed to follow along.
+
+この項目で`AArch64`における仮想memoryの学習ののち，次に進む前に[ARM Cortex-A Series Programmer's Guide for ARMv8-A]の`Chapter 12`を読むことを強くお勧めする．これは後で必要になる`AArch64`特有の知識を与えてくれる．
 
 Back from reading `Chapter 12` already? Good job :+1:!
 
 [ARM Cortex-A Series Programmer's Guide for ARMv8-A]: http://infocenter.arm.com/help/topic/com.arm.doc.den0024a/DEN0024A_v8_architecture_PG.pdf
 
 ## Approach
+## 方針
 
 1. The generic `kernel` part: `src/memory/mmu.rs` and its submodules provide architecture-agnostic
    descriptor types for composing a high-level data structure that describes the kernel's virtual
@@ -54,7 +67,12 @@ Back from reading `Chapter 12` already? Good job :+1:!
    driver. It picks up the `BSP`'s high-level `KernelVirtualLayout` and maps it using a `64 KiB`
    granule.
 
+1. 一般的な`kernel`部分: `src/memory/mmu.rs`とそのsubmodulesがkernelのvirtual memory layout`memory::mmu::KernelVirtualLayout`を記述するhigh-level data structureを構成するarchitecture固有の記述型を齎す．
+2. `BSP`部分: `src/bsp/raspberrypi/memory/mmu.rs`は`KernelVirtualLayout`の静的実体を含み，`bsp::memory::mmu::virt_mem_layout()`を使ってaccessできるようにする．
+3. `aarch64`部分: `src/_arch/aarch64/memory/mmu.rs`とそのsubmodulesは実際の`MMU`driverを含む．それは`BSP`のhigh-level `KenrelVirtualLayout`を拾い，`64KiB`単位で対応付ける．
+
 ### Generic Kernel code: `memory/mmu.rs`
+### 一般kernel code: `memory/mmu.rs`
 
 The descriptor types provided in this file are building blocks which help to describe attributes of
 different memory regions. For example, `R/W`, `no-execute`, `cached/uncached`, and so on.
