@@ -274,6 +274,8 @@ enables caching for data and instructions.
 We need to align the `rx` segment to `64 KiB` so that it doesn't overlap with the next section that
 needs read/write attributes instead of read/execute attributes:
 
+`rx`segmentを`64KiB`にalignする必要があるので，それはread/execute属性の代わりにread/write属性を必要とする次のsectionとは重ねない．
+
 ```ld.s
 . = ALIGN(64K); /* Align to page boundary */
 __rx_end_exclusive = .;
@@ -281,6 +283,8 @@ __rx_end_exclusive = .;
 
 This blows up the binary in size, but is a small price to pay considering that it reduces the amount
 of static paging entries significantly, when compared to the classical `4 KiB` granule.
+
+これはbinaryの大きさを肥大させるが，古典的な`4KiB`単位の分割と比べてstatic paging entriesの量を大幅に削減することを考えれば小さな代償だ．
 
 ## Address translation examples
 
@@ -292,7 +296,12 @@ virtual addresses:
 - Additionally, it is also mapped into the last `64 KiB` slot in the first `512 MiB`, making it
   accessible through base address `0x1FFF_1000`.
 
+学習のため，2つのvirtual addressesによって`UART`へのaccessを可能とするlayoutが定義される．
+- `Device MMIO`region全体を恒等写像で対応付けるため，`MMU`起動後にその物理base address(どちらのraspberry piを使うかに従って`0x3F20_1000`もしくは`0xFA20_1000`)を使ってaccessできる．
+- さらに，これは最初の`512MiB`の最後の`64KiB` slotにも対応付けられ，`0x1FFF_1000`からaccess可能となる．
+
 The following block diagram visualizes the underlying translation for the second mapping.
+以下のblock図は後者の対応付けの基礎となるtranslationを図示する．
 
 ### Address translation using a 64 KiB page descriptor
 
@@ -303,8 +312,12 @@ The following block diagram visualizes the underlying translation for the second
 The MMU init code is again a good example to see the great potential of Rust's zero-cost
 abstractions[[1]][[2]] for embedded programming.
 
+このMMU初期化codeはまたRustの組み込みprogramming向けのzero cost抽象の大きな可能性を理解するのによい例だ．
+
 Let's take a look again at the piece of code for setting up the `MAIR_EL1` register using the
 [cortex-a] crate:
+
+[cortex-a]crateを使って`MAIR_EL1`registerを設定するcodeの断片を見てみよう．
 
 [1]: https://blog.rust-lang.org/2015/05/11/traits.html
 [2]: https://ruudvanasseldonk.com/2016/11/30/zero-cost-abstractions
@@ -328,9 +341,14 @@ fn set_up_mair(&self) {
 This piece of code is super expressive, and it makes use of `traits`, different `types` and
 `constants` to provide type-safe register manipulation.
 
+このcodeの断片はとても意味のあるもので，型安全register処理を提供するために`traits`，様々な`types`，`constants`を利用する．
+
 In the end, this code sets the first four bytes of the register to certain values according to the
 data sheet. Looking at the generated code, we can see that despite all the type-safety and
 abstractions, it boils down to two assembly instructions:
+
+最後に，このcodeはそのregisterの最初の4bytesをdata sheetにしたがって特定の値に設定する．
+生成されたcodeを見ると，全ての型安全と抽象を理解できるが，それは2つのassembly命令に落とし込まれる．
 
 ```text
    800a8:       529fe089        mov     w9, #0xff04                     // #65284
@@ -340,6 +358,8 @@ abstractions, it boils down to two assembly instructions:
 ## Test it
 
 Turning on virtual memory is now the first thing we do during kernel init:
+
+virtual memoryの起動はkernel initで最初にすべきだ．
 
 ```rust
 unsafe fn kernel_init() -> ! {
@@ -352,6 +372,7 @@ unsafe fn kernel_init() -> ! {
 ```
 
 Later in the boot process, prints about the mappings can be observed:
+boot処理ののち，mappingsについての表示が出る
 
 ```console
 $ make chainboot
