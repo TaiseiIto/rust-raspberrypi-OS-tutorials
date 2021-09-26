@@ -77,12 +77,18 @@ Back from reading `Chapter 12` already? Good job :+1:!
 The descriptor types provided in this file are building blocks which help to describe attributes of
 different memory regions. For example, `R/W`, `no-execute`, `cached/uncached`, and so on.
 
+このfileが提供するdescriptor typesは，`R/W`, `no-execute`, `cached/uncached`などの，各memory regionの属性の記述を助けるblocksをbuildしている．
+
 The descriptors are agnostic of the hardware `MMU`'s actual descriptors. Different `BSP`s can use
 these types to produce a high-level description of the kernel's virtual memory layout. The actual
 `MMU` driver for the real HW will consume these types as an input.
 
+このdescriptorsは`MMU`の現実のdescriptorsの仮想化である．様々な`BSP`からこれらのtypesを使ってkernelの仮想memory layoutのhigh-level descriptionを生成できる．現実のhardwareのための実際の`MMU`driverはこれらのtypesを入力として吸収する．
+
 This way, we achieve a clean abstraction between `BSP` and `_arch` code, which allows exchanging one
 without needing to adapt the other.
+
+こうして，`BSP`と`_arch`のcode間の抽象化を達成し，適用することなく交換が可能となる．
 
 ### BSP: `bsp/raspberrypi/memory/mmu.rs`
 
@@ -90,9 +96,13 @@ This file contains an instance of `KernelVirtualLayout`, which stores the descri
 previously. The `BSP` is the correct place to do this, because it has knowledge of the target
 board's memory map.
 
+このfileは直前に述べたdescriptorsを格納する`KernelVirtualLayout`の実体を含む．この`BSP`は対象基盤のmemory mapを持っているため，これを行う正しい場所だ．
+
 The policy is to only describe regions that are **not** ordinary, normal chacheable DRAM. However,
 nothing prevents you from defining those too if you wish to. Here is an example for the device MMIO
 region:
+
+このpolicyは普通のchasheable DRAMではないregionsを記述するためだ．しかし，あなたが望めばそれらをも定義することもできる．以下にdevice MMIO regionを例示する．
 
 ```rust
 TranslationDescriptor {
@@ -108,6 +118,7 @@ TranslationDescriptor {
 ```
 
 `KernelVirtualLayout` itself implements the following method:
+`KernelVirtualLayout`自身は以下のmethodを実装する．
 
 ```rust
 pub fn virt_addr_properties(
@@ -123,25 +134,34 @@ findings for the first entry that is a hit. If no entry is found, it returns def
 normal chacheable DRAM and the input address, hence telling the `MMU` code that the requested
 address should be `identity mapped`.
 
+これは`_arch/aarch64`の`MMU`codeでvirtual addressとそのphysical output address(return-tupleの`usize`)を求めるtranslationの属性を取得するために使われる．この関数は指定されたaddressを含むdescriptorを探索し，見つかった最初のものを返す．entryが見つからなければ，要求されたaddressが`identity map`されるべきということを`MMU`codeが教えるため，normal chacheable DRAMとinput adressのdefault attributesを返す．
+
 Due to this default behavior, it is not needed to define normal cacheable DRAM regions.
+このような標準動作のため，normal chacheable DRAM regionsを定義する必要はない
 
 ### AArch64: `_arch/aarch64/memory/*`
 
 These modules contain the `AArch64` `MMU` driver. The granule is hardcoded here (`64 KiB` page
 descriptors).
+これらのmodulesは`AArch64` `MMU` driverを含む．このまとまりはここ(`64 KiB` page descriptor)にhardcodeされる．
 
 In `translation_table.rs`, there is a definition of the actual translation table struct which is
 generic over the number of `LVL2` tables. The latter depends on the size of the target board's
 memory. Naturally, the `BSP` knows these details about the target board, and provides the size
 through the constant `bsp::memory::mmu::KernelAddrSpace::SIZE`.
 
+`translation_table.rs`には，一般に`LVL2` tablesの個数以上の実際のtranslation table structの定義がある．後者は対象基盤のmemoryの大きさに依存する．当然，`BSP`は対象基盤についてのこれらの詳細を知っていて，定数`bsp::memory::mmu::KernelAddrSpace::SIZE`によってその大きさを取得できる．
+
 This information is used by `translation_table.rs` to calculate the number of needed `LVL2` tables.
 Since one `LVL2` table in a `64 KiB` configuration covers `512 MiB`, all that needs to be done is to
 divide `KernelAddrSpace::SIZE` by `512 MiB` (there are several compile-time checks in place that
 ensure that `KernelAddrSpace::SIZE` is a multiple of `512 MiB`).
 
+この情報は必要な`LVL2`tablesの個数を計算するために`translation_table.rs`で使用される．ひとつの`64KiB` configurationの中のひとつの`LVL2`tableが`512MiB`を覆うため，必要なのは`KernelAddrSpace::SIZE`を`512 MiB`ごとに分割することだ．(`KernelAddrSpace::SIZE`が`512MiB`の倍数となることを保証するいくつかのcompile-time checksがある)
+
 The final table type is exported as `KernelTranslationTable`. Below is the respective excerpt from
 `translation_table.rs`:
+最後のtable typeは`KernelTranslationTable`として出力される．以下は`translation_table.rs`からの引用だ．
 
 ```rust
 /// A table descriptor for 64 KiB aperture.
@@ -186,6 +206,7 @@ pub type KernelTranslationTable = FixedSizeTranslationTable<NUM_LVL2_TABLES>;
 
 In `mmu.rs`, `KernelTranslationTable` is then used to create the final instance of the kernel's
 tables:
+`mmu.rs`では，`KernelTranslationTable`がKernel's tablesの最後の実体を作るために使われる．
 
 ```rust
 //--------------------------------------------------------------------------------------------------
@@ -201,9 +222,13 @@ utilizes `bsp::memory::mmu::virt_mem_layout().virt_addr_properties()` and a bunc
 functions that convert the kernel generic descriptors to the actual `64 bit` integer entries needed
 by the `AArch64 MMU` hardware for the translation table arrays.
 
+これらは`MMU::init()`において`KERNEL_TABLES.populate_tt_entries()`を呼び出すことで生成される．これは`bsp::memory::mmu::virt_mem_layout().virt_addr_properties()`とkernel generic descriptorsを，`AArch64 MMU` hardwareが必要とする実際の`64bit` integer entriesに変換する便利な関数のまとまりを使う．
+
 One notable thing is that each page descriptor has an entry (`AttrIndex`) that indexes into the
 [MAIR_EL1] register, which holds information about the cacheability of the respective page. We
 currently define normal cacheable memory and device memory (which is not cached).
+
+注目に値することとして，各page descriptorは[MAIR_EL1]registerを指定するentry (`AttrIndex`)を持つ．これは各pageのcacheabilityに関する情報を持っている．normal cacheable memoryと，cacheされないdevice memoryを今定義する．
 
 [MAIR_EL1]: http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.ddi0500d/CIHDHJBB.html
 
@@ -226,6 +251,8 @@ impl MemoryManagementUnit {
 Afterwards, the [Translation Table Base Register 0 - EL1] is set up with the base address of the
 `lvl2` tables and the [Translation Control Register - EL1] is configured:
 
+その後，[Translation Table Base Register 0 - EL1]が`lvl2`tablesのbase addressによって設定され，[Translation Control Register - EL1]が設定される．
+
 ```rust
 // Set the "Translation Table Base Register".
 TTBR0_EL1.set_baddr(KERNEL_TABLES.phys_base_address());
@@ -235,6 +262,8 @@ self.configure_translation_control();
 
 Finally, the `MMU` is turned on through the [System Control Register - EL1]. The last step also
 enables caching for data and instructions.
+
+最後に`MMU`が[System Control Register - EL1]を通して起動する．この最終段階でdataと命令のcachingが有効になる．
 
 [Translation Table Base Register 0 - EL1]: https://docs.rs/crate/cortex-a/5.1.2/source/src/regs/ttbr0_el1.rs
 [Translation Control Register - EL1]: https://docs.rs/crate/cortex-a/5.1.2/source/src/regs/tcr_el1.rs
