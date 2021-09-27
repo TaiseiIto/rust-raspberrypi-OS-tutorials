@@ -117,13 +117,22 @@ pub fn mmu() -> &'static impl memory::mmu::interface::MMU {
 //------------------------------------------------------------------------------
 use memory::mmu::MMUEnableError;
 
+// memory/mmu.rsのMMU traitの実装
 impl memory::mmu::interface::MMU for MemoryManagementUnit {
+
+    // kernelの初期化中に呼び出される．`BSP`で実装されている`virt_mem_layout()`からtranslation tablesを取得し，当該MMUをinstall/activateすることを期待する．
+    // _arch/aarch64/memory/mmu.rsで実装されている．
     unsafe fn enable_mmu_and_caching(&self) -> Result<(), MMUEnableError> {
+
+        // 多重に初期化することを防ぐ
         if unlikely(self.is_enabled()) {
             return Err(MMUEnableError::AlreadyEnabled);
         }
 
         // Fail early if translation granule is not supported.
+        // ID_AA64MMFR0_EL1(Memory Model Feature Register)については以下を参照
+        // ID_AA64MMFR0_EL1の24bit目から27bit目がTGran64で，これが0ならば64KB単位のmemory translationに対応しているっぽい
+        // https://developer.arm.com/documentation/100403/0200/register-descriptions/aarch64-system-registers/id-aa64mmfr0-el1--aarch64-memory-model-feature-register-0--el1
         if unlikely(!ID_AA64MMFR0_EL1.matches_all(ID_AA64MMFR0_EL1::TGran64::Supported)) {
             return Err(MMUEnableError::Other(
                 "Translation granule not supported in HW",

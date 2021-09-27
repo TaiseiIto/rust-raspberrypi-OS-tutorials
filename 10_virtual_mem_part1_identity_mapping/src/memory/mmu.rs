@@ -48,6 +48,9 @@ pub mod interface {
         /// Called by the kernel during early init. Supposed to take the translation tables from the
         /// `BSP`-supplied `virt_mem_layout()` and install/activate them for the respective MMU.
         ///
+        /// kernelの初期化中に呼び出される．`BSP`で実装されている`virt_mem_layout()`からtranslation tablesを取得し，当該MMUをinstall/activateすることを期待する．
+        /// _arch/aarch64/memory/mmu.rsで実装されている．
+        ///
         /// # Safety
         ///
         /// - Changes the HW's global state.

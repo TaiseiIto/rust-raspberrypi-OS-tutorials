@@ -144,6 +144,8 @@ unsafe fn kernel_init() -> ! {
     use driver::interface::DriverManager;
     use memory::mmu::interface::MMU;
 
+    // 仮想メモリの初期化
+    // memory/mmu.rsにMMU traitがある
     if let Err(string) = memory::mmu::mmu().enable_mmu_and_caching() {
         panic!("MMU: {}", string);
     }
