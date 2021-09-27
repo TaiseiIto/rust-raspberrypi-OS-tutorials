@@ -161,11 +161,14 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
         self.set_up_mair();
 
         // Populate translation tables.
+        // KENRLE_TABLESは_arch/aarch64/memory/mmu/translation_table.rsで定義されるKernelTranslationTable型LVL2のtranslation table
+        // populate_tt_entries()でlvl2,lvl3の全entryを初期化
         KERNEL_TABLES
             .populate_tt_entries()
-            .map_err(|e| MMUEnableError::Other(e))?;
+            .map_err(|e| MMUEnableError::Other(e))?; // 失敗したときだけeをMMUEnableError::Other(e)にする
 
         // Set the "Translation Table Base Register".
+        // x86のCR3的なやつを設定
         TTBR0_EL1.set_baddr(KERNEL_TABLES.phys_base_address());
 
         self.configure_translation_control();

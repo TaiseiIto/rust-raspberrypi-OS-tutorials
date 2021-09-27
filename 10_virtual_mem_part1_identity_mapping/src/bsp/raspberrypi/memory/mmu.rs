@@ -18,23 +18,24 @@ pub type KernelAddrSpace = AddressSpace<{ memory_map::END_INCLUSIVE + 1 }>;
 const NUM_MEM_RANGES: usize = 3;
 
 /// The virtual memory layout.
-///
+/// ここにBSP(ここではraspberry pi)特有のvirtual memory layoutが書かれている
 /// The layout must contain only special ranges, aka anything that is _not_ normal cacheable DRAM.
 /// It is agnostic of the paging granularity that the architecture's MMU will use.
+/// このlayoutは特別なrangesのみを含む．architectureのMMUのpaging粒度には依存しない
 pub static LAYOUT: KernelVirtualLayout<NUM_MEM_RANGES> = KernelVirtualLayout::new(
     memory_map::END_INCLUSIVE,
     [
         TranslationDescriptor {
-            name: "Kernel code and RO data",
-            virtual_range: rx_range_inclusive,
-            physical_range_translation: Translation::Identity,
-            attribute_fields: AttributeFields {
+            name: "Kernel code and RO data", // 名前
+            virtual_range: rx_range_inclusive, // 仮想memory上の範囲
+            physical_range_translation: Translation::Identity, // 仮想addressと物理addressとの対応関係
+            attribute_fields: AttributeFields { // 属性
                 mem_attributes: MemAttributes::CacheableDRAM,
                 acc_perms: AccessPermissions::ReadOnly,
                 execute_never: false,
             },
         },
-        TranslationDescriptor {
+        TranslationDescriptor { // 仮想memoryにRemapされたDevice MMIO
             name: "Remapped Device MMIO",
             virtual_range: remapped_mmio_range_inclusive,
             physical_range_translation: Translation::Offset(memory_map::mmio::START + 0x20_0000),
@@ -44,7 +45,7 @@ pub static LAYOUT: KernelVirtualLayout<NUM_MEM_RANGES> = KernelVirtualLayout::ne
                 execute_never: true,
             },
         },
-        TranslationDescriptor {
+        TranslationDescriptor { // 素のDevice MMIO
             name: "Device MMIO",
             virtual_range: mmio_range_inclusive,
             physical_range_translation: Translation::Identity,
@@ -81,6 +82,7 @@ fn mmio_range_inclusive() -> RangeInclusive<usize> {
 //--------------------------------------------------------------------------------------------------
 
 /// Return a reference to the virtual memory layout.
+/// BSP(ここではraspberry pi)特有のmemory layoutを返す
 pub fn virt_mem_layout() -> &'static KernelVirtualLayout<NUM_MEM_RANGES> {
     &LAYOUT
 }

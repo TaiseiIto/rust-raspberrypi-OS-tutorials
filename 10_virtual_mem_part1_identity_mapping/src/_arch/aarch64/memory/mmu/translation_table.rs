@@ -121,6 +121,7 @@ trait StartAddr {
     fn phys_start_addr_usize(&self) -> usize;
 }
 
+// 全体のメモリ空間中の512MiBの塊の個数
 const NUM_LVL2_TABLES: usize = bsp::memory::mmu::KernelAddrSpace::SIZE >> Granule512MiB::SHIFT;
 
 //--------------------------------------------------------------------------------------------------
@@ -140,6 +141,7 @@ pub struct FixedSizeTranslationTable<const NUM_TABLES: usize> {
 }
 
 /// A translation table type for the kernel space.
+/// NUM_LVL2_TABLESは全体のメモリ空間中の512MiBの塊の個数
 pub type KernelTranslationTable = FixedSizeTranslationTable<NUM_LVL2_TABLES>;
 
 //--------------------------------------------------------------------------------------------------
@@ -264,16 +266,21 @@ impl<const NUM_TABLES: usize> FixedSizeTranslationTable<NUM_TABLES> {
     ///
     /// - Modifies a `static mut`. Ensure it only happens from here.
     pub unsafe fn populate_tt_entries(&mut self) -> Result<(), &'static str> {
+        // lvl2のtableの各entryをlvl3のtableのaddressで初期化
         for (l2_nr, l2_entry) in self.lvl2.iter_mut().enumerate() {
             *l2_entry =
                 TableDescriptor::from_next_lvl_table_addr(self.lvl3[l2_nr].phys_start_addr_usize());
 
+            // lvl3のtableの各entryをpageの物理addressで初期化
             for (l3_nr, l3_entry) in self.lvl3[l2_nr].iter_mut().enumerate() {
                 let virt_addr = (l2_nr << Granule512MiB::SHIFT) + (l3_nr << Granule64KiB::SHIFT);
 
+                // virt_mem_layoutから物理addressとpageの属性を取得
+                // bsp/raspberripi/memory/mmu.rsを参照
                 let (phys_output_addr, attribute_fields) =
                     bsp::memory::mmu::virt_mem_layout().virt_addr_properties(virt_addr)?;
 
+                // pageへのentryを設定
                 *l3_entry = PageDescriptor::from_output_addr(phys_output_addr, &attribute_fields);
             }
         }

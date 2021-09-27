@@ -231,7 +231,7 @@ impl<const NUM_SPECIAL_RANGES: usize> KernelVirtualLayout<{ NUM_SPECIAL_RANGES }
 
     /// For a virtual address, find and return the physical output address and corresponding
     /// attributes.
-    ///
+    /// 仮想addrから，物理addrとpageの属性を取得
     /// If the address is not found in `inner`, return an identity mapped default with normal
     /// cacheable DRAM attributes.
     pub fn virt_addr_properties(
