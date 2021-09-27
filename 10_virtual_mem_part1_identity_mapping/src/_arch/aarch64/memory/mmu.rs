@@ -74,12 +74,28 @@ impl MemoryManagementUnit {
     /// Setup function for the MAIR_EL1 register.
     fn set_up_mair(&self) {
         // Define the memory types being mapped.
+        // MAIR_EL1レジスタはAttr0~Attr7までそれぞれ8ビット計64ビットからなり，8種類のメモリ属性を定義できる
+        // https://developer.arm.com/documentation/ddi0595/2021-06/AArch64-Registers/MAIR-EL1--Memory-Attribute-Indirection-Register--EL1-?lang=en
         MAIR_EL1.write(
             // Attribute 1 - Cacheable normal DRAM.
-            MAIR_EL1::Attr1_Normal_Outer::WriteBack_NonTransient_ReadWriteAlloc +
+            // 通常のメモリ領域に対して与えられる属性
+            // 0b11110000
+            // write backは，キャッシュへの書き込みが終わったら次の処理に進み，空き時間にメモリに書き込む方式っぽい
+            // それに対してwrite throughは，キャッシュへ書き込むのと同時にメモリにも書き込む方式っぽい
+            // transient属性は，キャッシュに保存された情報が割とすぐにメモリに書き込まれる方式っぽい(以下を参照)
+            // https://developer.arm.com/documentation/ddi0406/c/Application-Level-Architecture/Application-Level-Memory-Model/Memory-types-and-attributes-and-the-memory-order-model/Normal-memory?lang=en#CHDHGEDG
+            MAIR_EL1::Attr1_Normal_Outer::WriteBack_NonTransient_ReadWriteAlloc + 
+            // 0b00001111
         MAIR_EL1::Attr1_Normal_Inner::WriteBack_NonTransient_ReadWriteAlloc +
 
         // Attribute 0 - Device.
+        // Deviceにmapされているメモリ領域に対して与えられる属性
+        // 0b00000100
+        // 以下を参照
+        // https://developer.arm.com/documentation/den0024/a/Memory-Ordering/Memory-types/Device-memory
+        // Gathering属性を有効にすると，連続するアドレスへの書き込みを一気にやってくれるらしい．例えば連続する2バイトに順番に書き込むコードが実行されるとひとつのhalf-word書き込みになるとか．
+        // Reordering属性を有効にすると，同じデバイスへの連続したアクセスが，順番を変えて実行されるらしい
+        // EarlyWriteAck属性を有効にすると，デバイスへの書き込みに対するAckが，デバイスからではなくそれ以前の中間バッファから送られる．人体でいう反射みたいな感じか．
         MAIR_EL1::Attr0_Device::nonGathering_nonReordering_EarlyWriteAck,
         );
     }
@@ -117,7 +133,7 @@ pub fn mmu() -> &'static impl memory::mmu::interface::MMU {
 //------------------------------------------------------------------------------
 use memory::mmu::MMUEnableError;
 
-// memory/mmu.rsのMMU traitの実装
+// MemoryManagementUnitiにmemory/mmu.rsのMMU traitを実装
 impl memory::mmu::interface::MMU for MemoryManagementUnit {
 
     // kernelの初期化中に呼び出される．`BSP`で実装されている`virt_mem_layout()`からtranslation tablesを取得し，当該MMUをinstall/activateすることを期待する．
@@ -140,6 +156,8 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
         }
 
         // Prepare the memory attribute indirection register.
+        // MAIR_EL1レジスタの準備
+        // 上にこの関数の実装がある
         self.set_up_mair();
 
         // Populate translation tables.
