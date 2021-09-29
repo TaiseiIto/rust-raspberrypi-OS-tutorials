@@ -101,20 +101,28 @@ impl MemoryManagementUnit {
     }
 
     /// Configure various settings of stage 1 of the EL1 translation regime.
+    /// キャッシュの動作に関するTCR_EL1(Translation Control Register)レジスタの設定
     fn configure_translation_control(&self) {
+        // メモリ空間の大きさの対数
         let t0sz = (64 - bsp::memory::mmu::KernelAddrSpace::SIZE_SHIFT) as u64;
-
+        // https://developer.arm.com/documentation/ddi0595/2021-06/AArch64-Registers/TCR-EL1--Translation-Control-Register--EL1-
         TCR_EL1.write(
             TCR_EL1::TBI0::Used
-                + TCR_EL1::IPS::Bits_40
-                + TCR_EL1::TG0::KiB_64
-                + TCR_EL1::SH0::Inner
-                + TCR_EL1::ORGN0::WriteBack_ReadAlloc_WriteAlloc_Cacheable
-                + TCR_EL1::IRGN0::WriteBack_ReadAlloc_WriteAlloc_Cacheable
-                + TCR_EL1::EPD0::EnableTTBR0Walks
-                + TCR_EL1::A1::TTBR0
-                + TCR_EL1::T0SZ.val(t0sz)
-                + TCR_EL1::EPD1::DisableTTBR1Walks,
+                + TCR_EL1::IPS::Bits_40 // Intermediate Physical address Size = 1TiB
+                + TCR_EL1::TG0::KiB_64 // Granule size for the TTBR0_EL1 = 64KiB
+                + TCR_EL1::SH0::Inner // Shareability attribute Inner Shareableについてはhttps://developer.arm.com/documentation/den0024/a/Memory-Ordering/Memory-attributes/Cacheable-and-shareable-memory-attributes
+                // Inner cache とはL1 cacheのこと
+                // Outer cache とはL2 cacheのこと
+                + TCR_EL1::ORGN0::WriteBack_ReadAlloc_WriteAlloc_Cacheable // Outer cacheability attribute 後で書き込む．
+                // Write Alloc は，write miss (書き込みを行いたい領域がキャッシュ上になかった場合)における処理のひとつで，その領域をキャッシュに読み込んでからキャッシュに書き込む
+                // No Write Allocでは，書き込みを行いたい領域をキャッシュに読み込まず，直接メモリに書き込む
+                // Read Allocも同様に，読み込みたい領域がキャッシュ上になかった場合，その領域をキャッシュに読み込んでからキャッシュを読み込む
+                // No Real Allocは同様の場合に，その領域をキャッシュに読み込むことなくメモリから直接読み込む
+                + TCR_EL1::IRGN0::WriteBack_ReadAlloc_WriteAlloc_Cacheable // Inner cacheability attribute
+                + TCR_EL1::EPD0::EnableTTBR0Walks // TTBR0_EL1アクセスしたい仮想アドレスがTLB (Translation Lookaside Buffer)になかった場合，Translation Table Walkを実行する．このビットを反転させると，同様の場合にTranslation faultを発生させる
+                + TCR_EL1::A1::TTBR0 // TTBR0_EL1 defined the ASID (Address Space Identifier)
+                + TCR_EL1::T0SZ.val(t0sz) // memory address space size
+                + TCR_EL1::EPD1::DisableTTBR1Walks,// TTBR1_EL1でアクセスしたい仮想アドレスがTLB (Translation Lookaside Buffer)になかった場合，Translation Table Walkを実行する．このビットを反転させると，同様の場合にTranslation faultを発生させる
         );
     }
 }
@@ -156,7 +164,7 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
         }
 
         // Prepare the memory attribute indirection register.
-        // MAIR_EL1レジスタの準備
+        // MAIR_EL1レジスタに必要なメモリ属性を定義する
         // 上にこの関数の実装がある
         self.set_up_mair();
 
@@ -171,6 +179,7 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
         // x86のCR3的なやつを設定
         TTBR0_EL1.set_baddr(KERNEL_TABLES.phys_base_address());
 
+        // キャッシュの動作に関するTCR_EL1(Translation Control Register)レジスタの設定
         self.configure_translation_control();
 
         // Switch the MMU on.
