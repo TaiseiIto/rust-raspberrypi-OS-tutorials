@@ -183,11 +183,16 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
         self.configure_translation_control();
 
         // Switch the MMU on.
-        //
+        // 命令同期バリア命令ISB(Instruction Synchronization Barrier)でCPU上で実行されている命令列のパイプラインをフラッシュする
         // First, force all previous changes to be seen before the MMU is enabled.
         barrier::isb(barrier::SY);
 
         // Enable the MMU and turn on data and instruction caching.
+        // SCTLR_EL1(System Control Register)
+        // https://developer.arm.com/documentation/ddi0595/2021-06/AArch64-Registers/SCTLR-EL1--System-Control-Register--EL1-
+        // SCTLR::Mは0ビット目で，これを1にするとEL1&0のstage 1のaddress translationが有効になる
+        // SCTLR::Cは2ビット目で，Stage 1 Cacheability, for data accesses
+        // SCTLR::Iは12ビット目で，Stage 1 instruction access cacheability control, for accesses at EL0 and EL1
         SCTLR_EL1.modify(SCTLR_EL1::M::Enable + SCTLR_EL1::C::Cacheable + SCTLR_EL1::I::Cacheable);
 
         // Force MMU init to complete before next instruction.
