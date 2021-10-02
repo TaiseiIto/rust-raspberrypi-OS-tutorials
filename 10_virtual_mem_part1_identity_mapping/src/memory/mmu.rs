@@ -178,6 +178,7 @@ impl fmt::Display for TranslationDescriptor {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Call the function to which self.range points, and dereference the result, which causes
         // Rust to copy the value.
+        // 始点と終点の物理アドレスとサイズ
         let start = *(self.virtual_range)().start();
         let end = *(self.virtual_range)().end();
         let size = end - start + 1;
@@ -188,6 +189,7 @@ impl fmt::Display for TranslationDescriptor {
         // log2(1024 * 1024).
         const MIB_RSHIFT: u32 = 20;
 
+        //サイズを表示する単位を決定
         let (size, unit) = if (size >> MIB_RSHIFT) > 0 {
             (size >> MIB_RSHIFT, "MiB")
         } else if (size >> KIB_RSHIFT) > 0 {
@@ -196,16 +198,19 @@ impl fmt::Display for TranslationDescriptor {
             (size, "Byte")
         };
 
+        // Normal Cacheable DRAMかDevice領域か
         let attr = match self.attribute_fields.mem_attributes {
             MemAttributes::CacheableDRAM => "C",
             MemAttributes::Device => "Dev",
         };
 
+        // access permissions
         let acc_p = match self.attribute_fields.acc_perms {
             AccessPermissions::ReadOnly => "RO",
             AccessPermissions::ReadWrite => "RW",
         };
 
+        // 実行可能かどうか
         let xn = if self.attribute_fields.execute_never {
             "PXN"
         } else {
@@ -259,7 +264,7 @@ impl<const NUM_SPECIAL_RANGES: usize> KernelVirtualLayout<{ NUM_SPECIAL_RANGES }
     /// Print the memory layout.
     pub fn print_layout(&self) {
         use crate::info;
-
+        // 上に書いてあるimpl fmt::Display for TranslationDescriptorに従ってinnerの中のTranslationDescriptorをひとつずつ表示
         for i in self.inner.iter() {
             info!("{}", i);
         }

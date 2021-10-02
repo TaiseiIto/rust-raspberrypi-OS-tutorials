@@ -177,6 +177,9 @@ fn kernel_main() -> ! {
     );
     info!("Booting on: {}", bsp::board_name());
 
+    // MMUの表示
+    // bsp/raspberrypi/memory/mmu.rsのvirt_mem_layout()で取得したレイアウトを
+    // memory/mmu.rsのprint_layoutで表示
     info!("MMU online. Special regions:");
     bsp::memory::mmu::virt_mem_layout().print_layout();
 
@@ -203,6 +206,7 @@ fn kernel_main() -> ! {
     info!("Timer test, spinning for 1 second");
     time::time_manager().spin_for(Duration::from_secs(1));
 
+    //仮想メモリを通してUARTに書き込み
     let remapped_uart = unsafe { bsp::device_driver::PL011Uart::new(0x1FFF_1000) };
     writeln!(
         remapped_uart,
