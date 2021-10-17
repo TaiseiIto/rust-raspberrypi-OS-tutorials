@@ -117,7 +117,7 @@ impl MemoryManagementUnit {
                 // Write Alloc は，write miss (書き込みを行いたい領域がキャッシュ上になかった場合)における処理のひとつで，その領域をキャッシュに読み込んでからキャッシュに書き込む
                 // No Write Allocでは，書き込みを行いたい領域をキャッシュに読み込まず，直接メモリに書き込む
                 // Read Allocも同様に，読み込みたい領域がキャッシュ上になかった場合，その領域をキャッシュに読み込んでからキャッシュを読み込む
-                // No Real Allocは同様の場合に，その領域をキャッシュに読み込むことなくメモリから直接読み込む
+                // No Read Allocは同様の場合に，その領域をキャッシュに読み込むことなくメモリから直接読み込む
                 + TCR_EL1::IRGN0::WriteBack_ReadAlloc_WriteAlloc_Cacheable // Inner cacheability attribute
                 + TCR_EL1::EPD0::EnableTTBR0Walks // TTBR0_EL1アクセスしたい仮想アドレスがTLB (Translation Lookaside Buffer)になかった場合，Translation Table Walkを実行する．このビットを反転させると，同様の場合にTranslation faultを発生させる
                 + TCR_EL1::A1::TTBR0 // TTBR0_EL1 defined the ASID (Address Space Identifier)

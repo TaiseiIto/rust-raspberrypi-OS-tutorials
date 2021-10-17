@@ -178,7 +178,7 @@ impl fmt::Display for TranslationDescriptor {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Call the function to which self.range points, and dereference the result, which causes
         // Rust to copy the value.
-        // 始点と終点の物理アドレスとサイズ
+        // 始点と終点のアドレスとサイズ
         let start = *(self.virtual_range)().start();
         let end = *(self.virtual_range)().end();
         let size = end - start + 1;
