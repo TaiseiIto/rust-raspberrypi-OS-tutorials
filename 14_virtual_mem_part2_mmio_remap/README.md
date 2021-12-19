@@ -11,6 +11,12 @@
     - Device `MMIO regions` are remapped lazily to a special virtual address region at the top of
       the virtual address space during the device driver's `init()`.
 
+- `kernel`空間と`user`空間を分離するためにいつか必要になる変更の最初の集合を導入する．
+- 基盤のaddress空間全体の恒等写像を廃止するためにmemory mapping戦略はより高度なものになる．
+- その代わり，mapされる必要がある範囲だけ:
+    - `kernel binary`は今のところ恒等写像のまま
+    - Device `MMIO regions`はdevice driverの`init()`で特別な仮想address範囲にremapされる．
+
 ## Table of Contents
 
 - [Introduction](#introduction)
@@ -26,11 +32,18 @@
 This tutorial is a first step of many needed for enabling `userspace applications` (which we
 hopefully will have some day in the very distant future).
 
+今回のtutorialは(遠い将来実現するであろう)`userspace applications`を有効にするために必要な最初の段階だ．
+
 For this, one of the features we want is a clean separation of `kernel` and `user` address spaces.
 Fortunately, `ARMv8` has convenient architecture support to realize this. The following text and
 pictue gives some more motivation and technical information. It is quoted from the _[ARM Cortex-A
-Series Programmer窶冱 Guide for ARMv8-A], Chapter 12.2, Separation of kernel and application Virtual
+Series Programmer's Guide for ARMv8-A], Chapter 12.2, Separation of kernel and application Virtual
 Address spaces_:
+
+このため，我々が求める機能のひとつは`kernel`空間と`user`空間の完全な分割だ．
+幸い，`ARMv8`はこれを実現するための便利なarchitecture支援を持っている．
+以下の文と図からさらなる利点と技術情報が得られる．
+_[ARM Cortex-A Series Programmer's Guide for ARMv8-A], Chapter 12.2, Separation of kernel and application Virtual Address spaces_ からの引用:
 
 > Operating systems typically have a number of applications or tasks running concurrently. Each of
 > these has its own unique set of translation tables and the kernel switches from one to another as
@@ -46,6 +59,17 @@ Address spaces_:
 > Figure 12-4 shows how the kernel space can be mapped to the most significant area of memory and
 > the Virtual Address space associated with each application mapped to the least significant area of
 > memory. However, both of these are mapped to a much smaller Physical Address space.
+
+> OSは一般に同時に複数のapplicationsおよびtasksを走らせる．
+> これらはそれぞれが独自のtranslation tablesと，あるtaskから別のtaskへのswitching contextの処理の一部としてkernel switchesを持つ．
+> しかし，memory systemの大部分はkernelのみに使われ，仮想addressから稀に変更されるtranslation table entriesで割り当てられた物理addressに直される．
+> ARMv8 architectureはこの要求を効率的に扱ういくつかの機能を提供する．
+>
+> Table base addressはTranslation Table Base Registers `TTBR0_EL1` と `TTBR1_EL1` で識別される．
+> `TTBR0` が指し示す translation table は VA の upper bits が全て0の時に選ばれる．
+> `TTBR1` は VA の upper bits が全て1の時に選ばれる．[...]
+>
+> 図12-4はどのようにkernel空間がmemoryの最も重要な領域にmapされ，各applicationに関連付けられた仮想address空間がmemoryの重要でない領域にmapされるかを示す．
 
 <p align="center">
     <img src="../doc/15_kernel_user_address_space_partitioning.png" height="500" align="center">
