@@ -133,6 +133,8 @@ code**.
 
 First, we define an interface for operating on `translation tables`:
 
+最初に，`translation tables`を操作するためのinterfaceを定義する．
+
 ```rust
 /// Translation table operations.
 pub trait TranslationTable {
@@ -167,12 +169,23 @@ driver (`src/arch/.../memory/mmu.rs`). This made sense because the MMU driver co
 that needed to be concerned with the table data structure, so having it accessible locally
 simplified things.
 
+kenrelのtranslation tablesを処理するためのgeneric kernel code を有効化するために，最初にこれらをaccess可能にしなけばならない．
+今までこれらは architenture 固有の MMU drive (`src/arch/.../memory/mmu.rs`) において隠された構造だった．
+MMU codeがtable data構造に関連付けるために必要なだけのcodeだったためこれは意味をなした．
+そのためこれを局所的にaccess可能にしておくことは物事を簡単にする．
+
 Since the tables need to be exposed to the rest of the kernel code now, it makes sense to move them
 to `BSP` code. Because ultimately, it is the `BSP` that is defining the translation table's
 properties, such as the size of the virtual address space that the tables need to cover.
 
+tablesはkernel codeから見えるようにする必要があるため，tablesを`BSP`codeに移動することが重要だ．
+最終的にはtableが覆わなければならない仮想address空間の大きさのようなtranslation tableの属性を定義する`BSP`だからだ．
+
 They are now defined in the global instances region of `src/bsp/.../memory/mmu.rs`. To control
 access, they are  guarded by an `InitStateLock`.
+
+これらは`src/bsp/.../memory/mmu.rs`のglobal instances regionで定義されている．
+accessを制御するため，これらは`InitStateLock`によって保護される．
 
 ```rust
 //--------------------------------------------------------------------------------------------------
@@ -192,7 +205,13 @@ This is done to (1) ensure a sane compile-time definition of the translation tab
 various bounds checks), and (2) to separate concerns between generic `MMU` code and specializations
 that come from the `architectural` part.
 
+構造体`KernelTranslationTable`は同じfileで定義された型別名だ．同様に`KernelVirtAddrSpace`型に関連付けられた型からその定義を取得する．`KernelVirtAddrSpace`はそれ自身が`memory::mmu::AddressSpace`型の型別名である．
+ひどく複雑に聞こえるのは分かっているが，結局は`const generics`のいくつかの層でしかない．`const generics`の実装は`generic`と`arch`のcodeに散りばめられている．
+これは(1)いくつかの境界確認を行うことによりtranslation table構造の健全なcompile時定義を保証するため，(2)generic `MMU` codeと`architectural`部分で特殊化されたものの関係を分離するためになされる．
+
 In the end, these tables can be accessed by calling `bsp::memory::mmu::kernel_translation_tables()`:
+
+結局は，これらのtablesは`bsp::memory::mmu::kernel_translation_tables()`を呼び出すことでaccess可能となる．
 
 ```rust
 /// Return a reference to the kernel's translation tables.
@@ -204,6 +223,9 @@ pub fn kernel_translation_tables() -> &'static InitStateLock<KernelTranslationTa
 Finally, the generic kernel code (`src/memory/mmu.rs`) now provides a couple of memory mapping
 functions that access and manipulate this instance. They  are exported for the rest of the kernel to
 use:
+
+最後に，generic kernel code (`src/memory/mmu.rs`)はこの実体にaccessし処理するmemory mapping関数の組を提供する．
+これらはkernelの他の部分で使われるためにexportされる．
 
 ```rust
 /// Raw mapping of virtual to physical pages in the kernel translation tables.
