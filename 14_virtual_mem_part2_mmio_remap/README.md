@@ -111,14 +111,23 @@ Until now, the whole address space of the board was identity mapped at once. The
 together directly while setting up the translation tables, without any indirection through **generic
 kernel code** (`src/memory/**`).
 
+今まで，基盤のaddress空間全体は恒等写像された．
+kernelの **architecture** (`src/_arch/_/memory/**`) の部分と **bsp** (`src/bsp/_/memory/**`) の部分はtranslation tablesを設定する間 **generic kernel code** (`src/memory/**`) を通して間接参照することなく，共に直接動作していた．
+
 The way it worked was that the `architectural MMU code` would query the `bsp code` about the start
 and end of the physical address space, and any special regions in this space that need a mapping
 that _is not_ normal chacheable DRAM. It would then go ahead and map the whole address space at once
 and never touch the translation tables again during runtime.
 
+これを動かす方法は `architectural MMU code` が `bsp code` に物理address空間の始点と終点および物理address空間のうち通常のcacheable DRAMでない領域にmapされる必要のある特別な領域を問い合わせることだ．
+こうしてaddress空間全体をmapし，これ以降再びtranslation tablesに触れることはない．
+
 Changing in this tutorial, **architecture** and **bsp** code will no longer autonomously create the
 virtual memory mappings. Instead, this is now orchestrated by the kernel's **generic MMU subsystem
 code**.
+
+このtutorialでの変更により， **architecture** と **bsp** のcodeはもはや自動的に仮想memory mappingsを作らない．
+代わりに，kernelの **generic MMU subsystem code** に統合される．
 
 ### A New Mapping API in `src/memory/mmu/translation_table.rs`
 
