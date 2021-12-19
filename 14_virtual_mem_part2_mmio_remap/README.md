@@ -341,6 +341,8 @@ unsafe fn init(&self) -> Result<(), &'static str> {
 There's a couple of changes not covered in this tutorial text, but the reader should ideally skim
 through them:
 
+このtutorial文では扱われていない変更がいくつかあるが，読者はできればこれらを流し読みすべきだ．
+
 - [`src/bsp/raspberrypi/memory.rs`](src/bsp/raspberrypi/memory.rs) and
   [`src/bsp/raspberrypi/link.ld`](src/bsp/raspberrypi/link.ld) changed the location of the boot
   core's stack. It is now located after the data segment, and separated by an unmapped `guard page`.
@@ -355,10 +357,16 @@ through them:
   (in case of drivers that have their MMIO ranges in the same `64 KiB` page) or printing mappings
   statistics.
 
+- [`src/bsp/raspberrypi/memory.rs`](src/bsp/raspberrypi/memory.rs) と [`src/bsp/raspberrypi/link.ld`](src/bsp/raspberrypi/link.ld) はboot coreのstackの場所を変更する．これはdata segmentの後に置かれ，mapされない`guard page`によって分割される．[`src/_arch/aarch64/exception.rs`](src/_arch/aarch64/exception.rs)はdata abort時に実行し，fault addressが`stack guard page`上にあるかどうか確認する．これはkernel stack overflowが起きたかどうかの指標になりえる．
+- [`src/memory/mmu/types.rs`](src/memory/mmu/types.rs)は`Page<ATYPE>`などの必要な型を導入する．
+- [`src/memory/mmu/mapping_record.rs`](src/memory/mmu/mapping_record.rs)は既存のmappingsを再利用(同じ64KiB pageにMMIO範囲を持つdriversの場合)したりmappingsの統計を表示するためにgeneric kernel codeが以前のmemory mappingsを追跡する手段を提供する．
+
 ## Test it
 
 When you load the kernel, you can now see that the driver's MMIO virtual addresses start at
 `0x1_f000_0000`:
+
+Kernelを読み込んだ時，driverのMMIOの仮想addressが`0x1_f000_0000`から始まることを確認できる．
 
 Raspberry Pi 3:
 
