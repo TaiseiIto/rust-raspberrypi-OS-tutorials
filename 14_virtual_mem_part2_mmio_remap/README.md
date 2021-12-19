@@ -69,7 +69,7 @@ _[ARM Cortex-A Series Programmer's Guide for ARMv8-A], Chapter 12.2, Separation 
 > `TTBR0` が指し示す translation table は VA の upper bits が全て0の時に選ばれる．
 > `TTBR1` は VA の upper bits が全て1の時に選ばれる．[...]
 >
-> 図12-4はどのようにkernel空間がmemoryの最も重要な領域にmapされ，各applicationに関連付けられた仮想address空間がmemoryの重要でない領域にmapされるかを示す．
+> 図12-4はkernel空間がmemoryの最もaddressの大きな領域にmapされ，各applicationに関連付けられた仮想address空間がmemoryのaddressの小さな領域にmapされることを示す．
 
 <p align="center">
     <img src="../doc/15_kernel_user_address_space_partitioning.png" height="500" align="center">
@@ -77,6 +77,9 @@ _[ARM Cortex-A Series Programmer's Guide for ARMv8-A], Chapter 12.2, Separation 
 
 This approach is also sometimes called a "[higher half kernel]". To eventually achieve this
 separation, this tutorial makes a start by changing the following things:
+
+このやり方は"[higher half kernel]"と呼ばれる．
+いずれこの分離を達成するため，このtutorialは手始めに以下の変更を行う．
 
 1. Instead of bulk-`identity mapping` the whole of the board's address space, only the particular
    parts that are needed will be mapped.
@@ -91,7 +94,14 @@ separation, this tutorial makes a start by changing the following things:
 1. We keep using `TTBR0` for the kernel translation tables for now. This will be changed when we
    remap the `kernel binary` in the coming tutorials.
 
-[ARM Cortex-A Series Programmer窶冱 Guide for ARMv8-A]: https://developer.arm.com/documentation/den0024/latest/
+1. 基盤のaddress空間全体を恒等写像する代わりに必要な部分だけをmapする．
+1. 今のところ，`kernel binary`は恒等写像のままだ．kernelのremapはとても難しく奇妙な課題であるため今後のtutorialsで変更されるだろう．
+1. Device `MMIO regions`はdevice driverの`init()`の間ゆっくりとremapされる．
+    1. このremapは仮想address空間の先頭に配置される．`AArch64 MMU Drive`において先頭`256 MiB`をこのために割り当てる．
+    1. compile時に仮想address空間の大きさが定義可能だ．remapされたMMIOの仮想addressが`7936 MiB` (`0x1_f000_0000`) から始まるようにとりあえず`8 GiB`とする．
+1. 今のところ`TTBR0`をkernel translation tablesとして使い続ける．今後のtutorialsで`kernel binary`をremapする際に変更されるだろう．
+
+[ARM Cortex-A Series Programmer's Guide for ARMv8-A]: https://developer.arm.com/documentation/den0024/latest/
 [higher half kernel]: https://wiki.osdev.org/Higher_Half_Kernel
 
 ## Implementation
