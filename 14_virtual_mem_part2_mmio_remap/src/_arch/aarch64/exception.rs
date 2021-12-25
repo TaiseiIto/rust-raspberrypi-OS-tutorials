@@ -55,10 +55,12 @@ struct EsrEL1;
 //--------------------------------------------------------------------------------------------------
 
 /// Check if additional context can be derived from a data abort.
+/// Data abortから状況を取得できるか確認
 fn inspect_data_abort(f: &mut fmt::Formatter) -> fmt::Result {
     let fault_addr = Address::new(FAR_EL1.get() as usize);
 
     if bsp::memory::mmu::virt_boot_core_stack_guard_page_desc().contains(fault_addr) {
+        // カーネルのブートコアスタックにアクセスしようとしたことを検出
         writeln!(
             f,
             "\n\n      >> Attempted to access the guard page of the kernel's boot core stack <<"
@@ -186,6 +188,7 @@ impl fmt::Display for EsrEL1 {
         // Raw print of instruction specific syndrome.
         write!(f, "      Instr Specific Syndrome (ISS): {:#x}", esr_el1.read(ESR_EL1::ISS))?;
 
+        // ここで上のinspect_data_abort関数を呼び出して，カーネルのブートコアスタックにアクセスしようとしたことを検出
         inspect_data_abort(f)
     }
 }
