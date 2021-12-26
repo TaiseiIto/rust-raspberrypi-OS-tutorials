@@ -129,6 +129,7 @@ impl GICv2 {
     ///
     /// - The user must ensure to provide correct MMIO descriptors.
     pub const unsafe fn new(
+        // 引数でgicd_mmio, gicc_mmioそれぞれの先頭addressを与えていたのを，memory::mmu::MMIODescriptorを与えるようにしている
         gicd_mmio_descriptor: memory::mmu::MMIODescriptor,
         gicc_mmio_descriptor: memory::mmu::MMIODescriptor,
     ) -> Self {
@@ -156,17 +157,19 @@ impl driver::interface::DeviceDriver for GICv2 {
     unsafe fn init(&self) -> Result<(), &'static str> {
         let remapped = self.is_mmio_remapped.load(Ordering::Relaxed);
         if !remapped {
+            // MMIOがremapされていない場合，remapする
             let mut virt_addr;
 
-            // GICD
+            // GICDの仮想addressをMMIO領域に設定?
             virt_addr = memory::mmu::kernel_map_mmio("GICD", &self.gicd_mmio_descriptor)?;
             self.gicd.set_mmio(virt_addr.into_usize());
 
-            // GICC
+            // GICCの仮想addressをMMIO領域に設定?
             virt_addr = memory::mmu::kernel_map_mmio("GICC", &self.gicc_mmio_descriptor)?;
             self.gicc.set_mmio(virt_addr.into_usize());
 
             // Conclude remapping.
+            // Remap完了flagを立てる
             self.is_mmio_remapped.store(true, Ordering::Relaxed);
         }
 

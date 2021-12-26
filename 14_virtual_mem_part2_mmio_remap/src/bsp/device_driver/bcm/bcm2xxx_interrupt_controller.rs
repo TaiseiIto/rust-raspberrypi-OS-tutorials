@@ -6,6 +6,7 @@
 
 mod peripheral_ic;
 
+// crate memoryを追加
 use crate::{driver, exception, memory};
 
 //--------------------------------------------------------------------------------------------------
@@ -80,6 +81,7 @@ impl InterruptController {
     ///
     /// - The user must ensure to provide correct MMIO descriptors.
     pub const unsafe fn new(
+        // 引数を先頭仮想addressで渡していたのをMMIODescriptorに変更
         _local_mmio_descriptor: memory::mmu::MMIODescriptor,
         periph_mmio_descriptor: memory::mmu::MMIODescriptor,
     ) -> Self {
@@ -98,6 +100,8 @@ impl driver::interface::DeviceDriver for InterruptController {
         "BCM Interrupt Controller"
     }
 
+    // 今回追加された関数
+    // 周辺機器の初期化
     unsafe fn init(&self) -> Result<(), &'static str> {
         self.periph.init()
     }

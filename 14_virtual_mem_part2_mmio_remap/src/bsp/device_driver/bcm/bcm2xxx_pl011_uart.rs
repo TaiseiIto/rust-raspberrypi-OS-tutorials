@@ -9,10 +9,12 @@
 //! - <https://github.com/raspberrypi/documentation/files/1888662/BCM2837-ARM-Peripherals.-.Revised.-.V2-1.pdf>
 //! - <https://developer.arm.com/documentation/ddi0183/latest>
 
+// 新しいcrate memoryを追加
 use crate::{
     bsp, bsp::device_driver::common::MMIODerefWrapper, console, cpu, driver, exception, memory,
     synchronization, synchronization::IRQSafeNullLock,
 };
+// 新しいcore sync::atomic::{AtomicUsize, Ordering}を追加
 use core::{
     fmt,
     sync::atomic::{AtomicUsize, Ordering},
@@ -235,6 +237,7 @@ pub use PL011UartInner as PanicUart;
 
 /// Representation of the UART.
 pub struct PL011Uart {
+    // 新しい要素mmio_descriptor, virt_mmio_start_addrを追加
     mmio_descriptor: memory::mmu::MMIODescriptor,
     virt_mmio_start_addr: AtomicUsize,
     inner: IRQSafeNullLock<PL011UartInner>,
@@ -280,8 +283,10 @@ impl PL011UartInner {
     /// # Safety
     ///
     /// - The user must ensure to provide a correct MMIO start address.
+    /// 引数としてMMIOの先頭仮想addressを追加
     pub unsafe fn init(&mut self, new_mmio_start_addr: Option<usize>) -> Result<(), &'static str> {
         if let Some(addr) = new_mmio_start_addr {
+            // 引数new_mmio_start_addrがaddrにmatchした場合，addrをregistersに入れる
             self.registers = Registers::new(addr);
         }
 
@@ -327,6 +332,7 @@ impl PL011UartInner {
             .CR
             .write(CR::UARTEN::Enabled + CR::TXE::Enabled + CR::RXE::Enabled);
 
+        // Okを返す
         Ok(())
     }
 
@@ -408,13 +414,16 @@ impl PL011Uart {
     /// - The user must ensure to provide correct MMIO descriptors.
     /// - The user must ensure to provide correct IRQ numbers.
     pub const unsafe fn new(
+        // MMIOの先頭仮想addressを渡していたのを，MMIODescriptorに変更
         mmio_descriptor: memory::mmu::MMIODescriptor,
         irq_number: bsp::device_driver::IRQNumber,
     ) -> Self {
         Self {
+            // 新しい要素mmio_descriptorとvirt_mmio_start_addrを追加
             mmio_descriptor,
             virt_mmio_start_addr: AtomicUsize::new(0),
             inner: IRQSafeNullLock::new(PL011UartInner::new(
+                // MMIODescriptorからMMIOの先頭仮想addressを取得して渡す
                 mmio_descriptor.start_addr().into_usize(),
             )),
             irq_number,
@@ -432,7 +441,9 @@ impl driver::interface::DeviceDriver for PL011Uart {
         "BCM PL011 UART"
     }
 
+    // PL011Uart構造体のdriver::interface::DeviceDriverとしての初期化
     unsafe fn init(&self) -> Result<(), &'static str> {
+        // MMIOの先頭仮想addressの取得
         let virt_addr = memory::mmu::kernel_map_mmio(self.compatible(), &self.mmio_descriptor)?;
 
         self.inner
@@ -459,13 +470,18 @@ impl driver::interface::DeviceDriver for PL011Uart {
         Ok(())
     }
 
+    // 今回追加した関数
+    // MMIOの先頭仮想addressを取得
     fn virt_mmio_start_addr(&self) -> Option<usize> {
+        // MMIOの先頭仮想addressを取得
         let addr = self.virt_mmio_start_addr.load(Ordering::Relaxed);
 
         if addr == 0 {
+            // ヌルポはNoneで返す
             return None;
         }
 
+        // MMIOの先頭仮想addressを返す
         Some(addr)
     }
 }

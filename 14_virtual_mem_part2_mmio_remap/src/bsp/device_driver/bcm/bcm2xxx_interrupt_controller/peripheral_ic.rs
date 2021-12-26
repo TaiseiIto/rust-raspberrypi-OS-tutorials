@@ -4,6 +4,7 @@
 
 //! Peripheral Interrupt Controller Driver.
 
+// 新しいcrate driver, memoryを追加
 use super::{InterruptController, PendingIRQs, PeripheralIRQ};
 use crate::{
     bsp::device_driver::common::MMIODerefWrapper,
@@ -51,12 +52,14 @@ type HandlerTable =
 
 /// Representation of the peripheral interrupt controller.
 pub struct PeripheralIC {
+    // 新しい要素mmio_descriptorを追加
     mmio_descriptor: memory::mmu::MMIODescriptor,
 
     /// Access to write registers is guarded with a lock.
     wo_registers: IRQSafeNullLock<WriteOnlyRegisters>,
 
     /// Register read access is unguarded.
+    /// 生のReadOnlyRegistersだったのをInitStateLockで包んでいる
     ro_registers: InitStateLock<ReadOnlyRegisters>,
 
     /// Stores registered IRQ handlers. Writable only during kernel init. RO afterwards.
@@ -73,10 +76,13 @@ impl PeripheralIC {
     /// # Safety
     ///
     /// - The user must ensure to provide correct MMIO descriptors.
+    /// 引数でMMIOの先頭仮想addressを渡していたのをMMIODescriptorを渡すようにしている
     pub const unsafe fn new(mmio_descriptor: memory::mmu::MMIODescriptor) -> Self {
+        // MMIODescriptorからMMIOの先頭仮想addressを取得
         let addr = mmio_descriptor.start_addr().into_usize();
 
         Self {
+            // 新しい要素mmio_descriptor, wo_registers, ro_registersを追加
             mmio_descriptor,
             wo_registers: IRQSafeNullLock::new(WriteOnlyRegisters::new(addr)),
             ro_registers: InitStateLock::new(ReadOnlyRegisters::new(addr)),
@@ -85,11 +91,13 @@ impl PeripheralIC {
     }
 
     /// Query the list of pending IRQs.
+    /// pending IRQのlistを問い合わせる
     fn pending_irqs(&self) -> PendingIRQs {
+        // Read Only registerからpending IRQのlistを取得
         self.ro_registers.read(|regs| {
             let pending_mask: u64 =
                 (u64::from(regs.PENDING_2.get()) << 32) | u64::from(regs.PENDING_1.get());
-
+                // PENDING_1とPENDING_2というのがあって，それらをorで合わせてるらしい(わからん)
             PendingIRQs::new(pending_mask)
         })
     }
@@ -100,15 +108,20 @@ impl PeripheralIC {
 //------------------------------------------------------------------------------
 use synchronization::interface::{Mutex, ReadWriteEx};
 
+// PeripheralIC構造体に対するdriver::interface::DeviceDriverの実装
 impl driver::interface::DeviceDriver for PeripheralIC {
     fn compatible(&self) -> &'static str {
+        // 謎の文字列を返している
         "BCM Peripheral Interrupt Controller"
     }
 
+    // PeripheralIC構造体のdriver::interface::DeviceDriverとしての初期化
     unsafe fn init(&self) -> Result<(), &'static str> {
+        // MMIOの先頭仮想addressの取得
         let virt_addr =
             memory::mmu::kernel_map_mmio(self.compatible(), &self.mmio_descriptor)?.into_usize();
 
+        // Write Only registersとRead Only registersの初期化
         self.wo_registers
             .lock(|regs| *regs = WriteOnlyRegisters::new(virt_addr));
         self.ro_registers

@@ -188,7 +188,6 @@ impl fmt::Display for EsrEL1 {
         // Raw print of instruction specific syndrome.
         write!(f, "      Instr Specific Syndrome (ISS): {:#x}", esr_el1.read(ESR_EL1::ISS))?;
 
-        // ここで上のinspect_data_abort関数を呼び出して，カーネルのブートコアスタックにアクセスしようとしたことを検出
         inspect_data_abort(f)
     }
 }

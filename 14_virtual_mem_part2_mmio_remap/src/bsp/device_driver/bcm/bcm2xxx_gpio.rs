@@ -4,6 +4,7 @@
 
 //! GPIO Driver.
 
+// 新しいcrate memory, core::sync::atomic::{AtomicUsize, Ordering}を追加
 use crate::{
     bsp::device_driver::common::MMIODerefWrapper, driver, memory, synchronization,
     synchronization::IRQSafeNullLock,
@@ -118,7 +119,9 @@ pub use GPIOInner as PanicGPIO;
 
 /// Representation of the GPIO HW.
 pub struct GPIO {
+    // MMIODescriptorをGPIOの要素に追加
     mmio_descriptor: memory::mmu::MMIODescriptor,
+    // MMIO領域の先頭仮想addressをGPIOの要素に追加
     virt_mmio_start_addr: AtomicUsize,
     inner: IRQSafeNullLock<GPIOInner>,
 }
@@ -140,12 +143,13 @@ impl GPIOInner {
     }
 
     /// Init code.
-    ///
+    /// GPIOInnerの初期化
     /// # Safety
     ///
     /// - The user must ensure to provide a correct MMIO start address.
     pub unsafe fn init(&mut self, new_mmio_start_addr: Option<usize>) -> Result<(), &'static str> {
         if let Some(addr) = new_mmio_start_addr {
+            // new_mmio_start_addrがSome(addr)にmatchしたとき，registersにMMIO領域の先頭addressを設定する
             self.registers = Registers::new(addr);
         }
 
@@ -207,10 +211,13 @@ impl GPIO {
     /// # Safety
     ///
     /// - The user must ensure to provide correct MMIO descriptors.
+    /// 引数をMMIOの先頭addressで渡していたのを，MMIODescriptorで渡すように変更
     pub const unsafe fn new(mmio_descriptor: memory::mmu::MMIODescriptor) -> Self {
         Self {
+            // mmio_descriptorとvirt_mmio_start_addrが今回追加された要素
             mmio_descriptor,
             virt_mmio_start_addr: AtomicUsize::new(0),
+            // MMIODescriptorからMMIOの先頭addressを取り出してGPIOInnerを作成してIRQSafeNullLockで包んでいる
             inner: IRQSafeNullLock::new(GPIOInner::new(mmio_descriptor.start_addr().into_usize())),
         }
     }
@@ -231,7 +238,9 @@ impl driver::interface::DeviceDriver for GPIO {
         "BCM GPIO"
     }
 
+    // GPIOの初期化
     unsafe fn init(&self) -> Result<(), &'static str> {
+        // MMIOの先頭仮想addressを取得
         let virt_addr = memory::mmu::kernel_map_mmio(self.compatible(), &self.mmio_descriptor)?;
 
         self.inner
@@ -243,13 +252,17 @@ impl driver::interface::DeviceDriver for GPIO {
         Ok(())
     }
 
+    // GPIOからMMIOの先頭仮想addressを取得する関数
     fn virt_mmio_start_addr(&self) -> Option<usize> {
+        // MMIOの先頭仮想addressを取得
         let addr = self.virt_mmio_start_addr.load(Ordering::Relaxed);
 
         if addr == 0 {
+            // ヌルポはNoneで返す
             return None;
         }
 
+        // 取得したMMIOの先頭仮想addressを返す
         Some(addr)
     }
 }
