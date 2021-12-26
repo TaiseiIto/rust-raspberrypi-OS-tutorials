@@ -5,6 +5,7 @@
 //! BSP console facilities.
 
 use super::memory;
+// 新しいcrate cpu, driverを追加
 use crate::{bsp::device_driver, console, cpu, driver};
 use core::fmt;
 
@@ -25,15 +26,19 @@ use core::fmt;
 pub unsafe fn panic_console_out() -> impl fmt::Write {
     use driver::interface::DeviceDriver;
 
+    // GPIOとUARTのpanicを取得
     let mut panic_gpio = device_driver::PanicGPIO::new(memory::map::mmio::GPIO_START.into_usize());
     let mut panic_uart =
         device_driver::PanicUart::new(memory::map::mmio::PL011_UART_START.into_usize());
 
     // If remapping of the driver's MMIO already happened, take the remapped start address.
     // Otherwise, take a chance with the default physical address.
+    // DriverのMMIOが既にremapされている場合，remapされた先頭addressを取得
+    // そうでなければ，既定の物理addressを取得
     let maybe_gpio_mmio_start_addr = super::GPIO.virt_mmio_start_addr();
     let maybe_uart_mmio_start_addr = super::PL011_UART.virt_mmio_start_addr();
 
+    // GPIOとUARTのそれぞれでpanicしてwait forever
     panic_gpio
         .init(maybe_gpio_mmio_start_addr)
         .unwrap_or_else(|_| cpu::wait_forever());
