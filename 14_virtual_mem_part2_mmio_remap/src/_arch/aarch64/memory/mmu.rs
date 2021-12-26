@@ -113,7 +113,7 @@ use memory::mmu::MMUEnableError;
 impl memory::mmu::interface::MMU for MemoryManagementUnit {
     unsafe fn enable_mmu_and_caching(
         &self,
-        phys_tables_base_addr: Address<Physical>,
+        phys_tables_base_addr: Address<Physical>, // 今回追加されたlvl2テーブルの先頭物理アドレスを表す引数
     ) -> Result<(), MMUEnableError> {
         if unlikely(self.is_enabled()) {
             return Err(MMUEnableError::AlreadyEnabled);
@@ -130,6 +130,7 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
         self.set_up_mair();
 
         // Set the "Translation Table Base Register".
+        // lvl2テーブルの先頭物理アドレスをTTBR0_EL1に設定
         TTBR0_EL1.set_baddr(phys_tables_base_addr.into_usize() as u64);
 
         self.configure_translation_control();

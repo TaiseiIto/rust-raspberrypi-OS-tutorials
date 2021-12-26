@@ -7,6 +7,7 @@
 //! # Glossary
 //!   - SPI - Shared Peripheral Interrupt.
 
+// 新しいcrate synchronization::InitStateLockを追加
 use crate::{
     bsp::device_driver::common::MMIODerefWrapper,
     state, synchronization,
@@ -80,6 +81,7 @@ pub struct GICD {
     shared_registers: IRQSafeNullLock<SharedRegisters>,
 
     /// Access to banked registers is unguarded.
+    /// 前回は生のBackedRegistersだったのをInitStateLockで包んでいる
     banked_registers: InitStateLock<BankedRegisters>,
 }
 
@@ -117,6 +119,7 @@ impl SharedRegisters {
 //--------------------------------------------------------------------------------------------------
 // Public Code
 //--------------------------------------------------------------------------------------------------
+// 新しいcrate synchronization::interface::ReadWriteExを追加
 use crate::synchronization::interface::ReadWriteEx;
 use synchronization::interface::Mutex;
 
@@ -129,10 +132,13 @@ impl GICD {
     pub const unsafe fn new(mmio_start_addr: usize) -> Self {
         Self {
             shared_registers: IRQSafeNullLock::new(SharedRegisters::new(mmio_start_addr)),
+            // 前回は生のBankedRegistersだったのを，InitStateLockで包んでいる
             banked_registers: InitStateLock::new(BankedRegisters::new(mmio_start_addr)),
         }
     }
 
+    // 今回追加された関数
+    // MMIO領域の先頭addressを更新する
     pub unsafe fn set_mmio(&self, new_mmio_start_addr: usize) {
         self.shared_registers
             .lock(|regs| *regs = SharedRegisters::new(new_mmio_start_addr));

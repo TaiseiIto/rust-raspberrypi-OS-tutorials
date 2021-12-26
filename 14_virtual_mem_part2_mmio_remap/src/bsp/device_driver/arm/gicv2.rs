@@ -79,6 +79,7 @@
 mod gicc;
 mod gicd;
 
+// 新しいcrate memory, core::sync::atomic::{AtomicBool, Ordering}を追加
 use crate::{bsp, cpu, driver, exception, memory, synchronization, synchronization::InitStateLock};
 use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -107,6 +108,7 @@ pub struct GICv2 {
     gicc: gicc::GICC,
 
     /// Have the MMIO regions been remapped yet?
+    /// MMIO領域が既にremapされているかどうか
     is_mmio_remapped: AtomicBool,
 
     /// Stores registered IRQ handlers. Writable only during kernel init. RO afterwards.
