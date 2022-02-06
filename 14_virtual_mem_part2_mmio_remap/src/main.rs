@@ -28,28 +28,35 @@ unsafe fn kernel_init() -> ! {
 
     exception::handling_init();
 
+    // カーネルのtranslation tablesのアドレス
     let phys_kernel_tables_base_addr = match memory::mmu::kernel_map_binary() {
         Err(string) => panic!("Error mapping kernel binary: {}", string),
         Ok(addr) => addr,
     };
 
+    // MMUとキャッシュの有効化
     if let Err(e) = memory::mmu::enable_mmu_and_caching(phys_kernel_tables_base_addr) {
         panic!("Enabling MMU failed: {}", e);
     }
     // Printing will silently fail from here on, because the driver's MMIO is not remapped yet.
+    // MMIOがremapされるまで出力できなくなる．
 
     // Bring up the drivers needed for printing first.
+    // early_print_devide_driversの初期化
     for i in bsp::driver::driver_manager()
         .early_print_device_drivers()
         .iter()
     {
         // Any encountered errors cannot be printed yet, obviously, so just safely park the CPU.
+        // エラーが起きても出力できないので仕方ないのでCPUを止めるようにする
         i.init().unwrap_or_else(|_| cpu::wait_forever());
     }
+    // early_print_deviceで出力できるようにする．
     bsp::driver::driver_manager().post_early_print_device_driver_init();
     // Printing available again from here on.
 
     // Now bring up the remaining drivers.
+    // non_early_print_deviceも初期化する
     for i in bsp::driver::driver_manager()
         .non_early_print_device_drivers()
         .iter()
@@ -60,6 +67,7 @@ unsafe fn kernel_init() -> ! {
     }
 
     // Let device drivers register and enable their handlers with the interrupt controller.
+    // 各デバイスを割り込み処理できるようにする．
     for i in bsp::driver::driver_manager().all_device_drivers() {
         if let Err(msg) = i.register_and_enable_irq_handler() {
             warn!("Error registering IRQ handler: {}", msg);

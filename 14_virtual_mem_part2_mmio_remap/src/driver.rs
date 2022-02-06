@@ -33,9 +33,11 @@ pub mod interface {
         }
 
         /// After MMIO remapping, returns the new virtual start address.
-        ///
+        /// MMIOリマッピング後のMMIOの新しい開始仮想アドレスを返す．
         /// This API assumes a driver has only a single, contiguous MMIO aperture, which will not be
         /// the case for more complex devices. This API will likely change in future tutorials.
+        /// このAPIは，ドライバがひとつの切れ目のないMMIO領域を持つことを仮定し，この仮定が成り立たない複雑なデバイスには対応しない．
+        /// このAPIは今後のtutorialsで変更される．
         fn virt_mmio_start_addr(&self) -> Option<usize> {
             None
         }
@@ -47,6 +49,8 @@ pub mod interface {
     pub trait DriverManager {
         /// Return a slice of references to all `BSP`-instantiated drivers.
         fn all_device_drivers(&self) -> &[&'static (dyn DeviceDriver + Sync)];
+
+        // 以下今回このtraitに追加されたドライバを取得するための関数たち
 
         /// Return only those drivers needed for the BSP's early printing functionality.
         ///

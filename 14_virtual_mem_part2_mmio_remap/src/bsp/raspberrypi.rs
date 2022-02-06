@@ -11,6 +11,7 @@ pub mod exception;
 pub mod memory;
 
 use super::device_driver;
+// MMIODescriptorを使う
 use crate::memory::mmu::MMIODescriptor;
 use memory::map::mmio;
 
@@ -18,11 +19,13 @@ use memory::map::mmio;
 // Global instances
 //--------------------------------------------------------------------------------------------------
 
+// MMIODescriptorを使う
 static GPIO: device_driver::GPIO =
     unsafe { device_driver::GPIO::new(MMIODescriptor::new(mmio::GPIO_START, mmio::GPIO_SIZE)) };
 
 static PL011_UART: device_driver::PL011Uart = unsafe {
     device_driver::PL011Uart::new(
+        // MMIODescriptorを使う
         MMIODescriptor::new(mmio::PL011_UART_START, mmio::PL011_UART_SIZE),
         exception::asynchronous::irq_map::PL011_UART,
     )
@@ -31,6 +34,7 @@ static PL011_UART: device_driver::PL011Uart = unsafe {
 #[cfg(feature = "bsp_rpi3")]
 static INTERRUPT_CONTROLLER: device_driver::InterruptController = unsafe {
     device_driver::InterruptController::new(
+        // MMIODescriptorを使う
         MMIODescriptor::new(mmio::LOCAL_IC_START, mmio::LOCAL_IC_SIZE),
         MMIODescriptor::new(mmio::PERIPHERAL_IC_START, mmio::PERIPHERAL_IC_SIZE),
     )
@@ -39,6 +43,7 @@ static INTERRUPT_CONTROLLER: device_driver::InterruptController = unsafe {
 #[cfg(feature = "bsp_rpi4")]
 static INTERRUPT_CONTROLLER: device_driver::GICv2 = unsafe {
     device_driver::GICv2::new(
+        // MMIODescriptorを使う
         MMIODescriptor::new(mmio::GICD_START, mmio::GICD_SIZE),
         MMIODescriptor::new(mmio::GICC_START, mmio::GICC_SIZE),
     )
