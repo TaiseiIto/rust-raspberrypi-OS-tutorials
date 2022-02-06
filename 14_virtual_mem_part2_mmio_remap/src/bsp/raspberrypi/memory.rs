@@ -4,13 +4,12 @@
 
 //! BSP Memory Management.
 //!
-//! The physical memory layout after the kernel has been loaded by the Raspberry's firmware, which
-//! copies the binary to 0x8_0000:
+//! ファームウェアがカーネルを0x8_0000番地に読み込んだ時の物理メモリレイアウト
 //!
 //! +---------------------------------------------+
 //! |                                             |
 //! | Unmapped                                    |
-//! |                                             |
+//! |                                             | 前回までカーネルスタックはここにあった
 //! +---------------------------------------------+
 //! |                                             | rx_start @ 0x8_0000
 //! | .text                                       |
@@ -25,7 +24,7 @@
 //! +---------------------------------------------+
 //! |                                             | rw_end
 //! | Unmapped Boot-core Stack Guard Page         |
-//! |                                             |
+//! |                                             | ここにアクセスしたらカーネルスタックオーバーフローを検出したことになる
 //! +---------------------------------------------+
 //! |                                             | boot_core_stack_start          ^
 //! |                                             |                                | stack
@@ -44,18 +43,23 @@ use core::{cell::UnsafeCell, ops::RangeInclusive};
 //--------------------------------------------------------------------------------------------------
 
 // Symbols from the linker script.
+// link.ldで定義されているシンボル
 extern "Rust" {
+    // カーネルの実行可能領域
     static __rx_start: UnsafeCell<()>;
     static __rx_end_exclusive: UnsafeCell<()>;
 
+    // カーネルのデータ領域
     static __rw_start: UnsafeCell<()>;
     static __bss_start: UnsafeCell<u64>;
     static __bss_end_inclusive: UnsafeCell<u64>;
     static __rw_end_exclusive: UnsafeCell<()>;
 
+    // 今回移動したスタック領域
     static __boot_core_stack_start: UnsafeCell<()>;
     static __boot_core_stack_end_exclusive: UnsafeCell<()>;
 
+    // スタックオーバーフローを検出するための領域
     static __boot_core_stack_guard_page_start: UnsafeCell<()>;
     static __boot_core_stack_guard_page_end_exclusive: UnsafeCell<()>;
 }
@@ -74,6 +78,7 @@ pub(super) mod map {
     pub mod mmio {
         use super::*;
 
+        // ここらへん前回は開始アドレスにusizeを使っていたのを，Address<Physical>に変えている
         pub const PERIPHERAL_IC_START: Address<Physical> = Address::new(0x3F00_B200);
         pub const PERIPHERAL_IC_SIZE:  usize             =              0x24;
 
@@ -94,6 +99,7 @@ pub(super) mod map {
     pub mod mmio {
         use super::*;
 
+        // ここらへん前回は開始アドレスにusizeを使っていたのを，Address<Physical>に変えている
         pub const GPIO_START:       Address<Physical> = Address::new(0xFE20_0000);
         pub const GPIO_SIZE:        usize             =              0xA0;
 
@@ -123,6 +129,8 @@ pub(super) mod map {
 /// - Value is provided by the linker script and must be trusted as-is.
 #[inline(always)]
 fn virt_rx_start() -> Address<Virtual> {
+    // 実行可能領域の開始仮想アドレス
+    // 前回usizeをそのまま返していたのを，Addressで包んで返すようにしている
     Address::new(unsafe { __rx_start.get() as usize })
 }
 
@@ -133,12 +141,14 @@ fn virt_rx_start() -> Address<Virtual> {
 /// - Value is provided by the linker script and must be trusted as-is.
 #[inline(always)]
 fn rx_size() -> usize {
+    // 実行可能領域の大きさ
     unsafe { (__rx_end_exclusive.get() as usize) - (__rx_start.get() as usize) }
 }
 
 /// Start address of the Read+Write (RW) range.
 #[inline(always)]
 fn virt_rw_start() -> Address<Virtual> {
+    // データ領域の開始仮想アドレス
     Address::new(unsafe { __rw_start.get() as usize })
 }
 
@@ -149,18 +159,21 @@ fn virt_rw_start() -> Address<Virtual> {
 /// - Value is provided by the linker script and must be trusted as-is.
 #[inline(always)]
 fn rw_size() -> usize {
+    // データ領域の大きさ
     unsafe { (__rw_end_exclusive.get() as usize) - (__rw_start.get() as usize) }
 }
 
 /// Start address of the boot core's stack.
 #[inline(always)]
 fn virt_boot_core_stack_start() -> Address<Virtual> {
+    // カーネルスタックの開始仮想アドレス
     Address::new(unsafe { __boot_core_stack_start.get() as usize })
 }
 
 /// Size of the boot core's stack.
 #[inline(always)]
 fn boot_core_stack_size() -> usize {
+    // カーネルスタックの大きさ
     unsafe {
         (__boot_core_stack_end_exclusive.get() as usize) - (__boot_core_stack_start.get() as usize)
     }
@@ -169,12 +182,14 @@ fn boot_core_stack_size() -> usize {
 /// Start address of the boot core's stack guard page.
 #[inline(always)]
 fn virt_boot_core_stack_guard_page_start() -> Address<Virtual> {
+    // カーネルスタックオーバーフロー検出用ガードページの開始仮想アドレス
     Address::new(unsafe { __boot_core_stack_guard_page_start.get() as usize })
 }
 
 /// Size of the boot core's stack guard page.
 #[inline(always)]
 fn boot_core_stack_guard_page_size() -> usize {
+    // カーネルスタックオーバーフロー検出用ガードページの大きさ
     unsafe {
         (__boot_core_stack_guard_page_end_exclusive.get() as usize)
             - (__boot_core_stack_guard_page_start.get() as usize)
@@ -184,6 +199,7 @@ fn boot_core_stack_guard_page_size() -> usize {
 /// Exclusive end address of the physical address space.
 #[inline(always)]
 fn phys_addr_space_end() -> Address<Physical> {
+    // 有効な最後の物理アドレス
     map::END
 }
 
@@ -203,6 +219,6 @@ pub fn bss_range_inclusive() -> RangeInclusive<*mut u64> {
         range = RangeInclusive::new(__bss_start.get(), __bss_end_inclusive.get());
     }
     assert!(!range.is_empty());
-
+    // カーネルのbss領域を返す
     range
 }

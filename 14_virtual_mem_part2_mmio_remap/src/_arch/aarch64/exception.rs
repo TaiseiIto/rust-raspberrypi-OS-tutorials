@@ -57,10 +57,12 @@ struct EsrEL1;
 /// Check if additional context can be derived from a data abort.
 /// Data abortから状況を取得できるか確認
 fn inspect_data_abort(f: &mut fmt::Formatter) -> fmt::Result {
+    // Fault Address Registerからデータアボートが起きたアドレスを取得
     let fault_addr = Address::new(FAR_EL1.get() as usize);
 
     if bsp::memory::mmu::virt_boot_core_stack_guard_page_desc().contains(fault_addr) {
         // カーネルのブートコアスタックにアクセスしようとしたことを検出
+        // ブートコアスタックオーバーフロー
         writeln!(
             f,
             "\n\n      >> Attempted to access the guard page of the kernel's boot core stack <<"
@@ -169,6 +171,7 @@ unsafe extern "C" fn lower_aarch32_serror(e: &mut ExceptionContext) {
 /// Human readable ESR_EL1.
 #[rustfmt::skip]
 impl fmt::Display for EsrEL1 {
+    // ESR_EL1は，Exception Syndrome Registerで，EL1で例外が発生したときにその例外に関する情報が格納される
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let esr_el1 = ESR_EL1.extract();
 
@@ -188,6 +191,7 @@ impl fmt::Display for EsrEL1 {
         // Raw print of instruction specific syndrome.
         write!(f, "      Instr Specific Syndrome (ISS): {:#x}", esr_el1.read(ESR_EL1::ISS))?;
 
+        // カーネルスタックオーバーフローかどうか調べる
         inspect_data_abort(f)
     }
 }
