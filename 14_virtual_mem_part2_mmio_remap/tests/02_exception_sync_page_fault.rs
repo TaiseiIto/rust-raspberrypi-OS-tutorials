@@ -29,6 +29,7 @@ unsafe fn kernel_init() -> ! {
     println!("Testing synchronous exception handling by causing a page fault");
     println!("-------------------------------------------------------------------\n");
 
+    // kernel translation tableのaddressが取得できることを確認
     let phys_kernel_tables_base_addr = match memory::mmu::kernel_map_binary() {
         Err(string) => {
             println!("Error mapping kernel binary: {}", string);
@@ -37,22 +38,27 @@ unsafe fn kernel_init() -> ! {
         Ok(addr) => addr,
     };
 
+    // MMUとcachingを初期化できることを確認
     if let Err(e) = memory::mmu::enable_mmu_and_caching(phys_kernel_tables_base_addr) {
         println!("Enabling MMU failed: {}", e);
         cpu::qemu_exit_failure()
     }
     // Printing will silently fail from here on, because the driver's MMIO is not remapped yet.
+    // MMIOがremapされていないので，ここから出力できなくなる
 
     // Bring up the drivers needed for printing first.
+    // 各driverに対して，
     for i in bsp::driver::driver_manager()
         .early_print_device_drivers()
         .iter()
     {
         // Any encountered errors cannot be printed yet, obviously, so just safely park the CPU.
+        // それを表示できないので，もしエラーが起きたらCPUを止めることにする
         i.init().unwrap_or_else(|_| cpu::qemu_exit_failure());
     }
     bsp::driver::driver_manager().post_early_print_device_driver_init();
     // Printing available again from here on.
+    // MMIOがremapされて，ここから再び出力できるようになる
 
     println!("Writing beyond mapped area to address 9 GiB...");
     let big_addr: u64 = 9 * 1024 * 1024 * 1024;
