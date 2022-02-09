@@ -18,20 +18,26 @@ use core::{
 //--------------------------------------------------------------------------------------------------
 
 /// Metadata trait for marking the type of an address.
+/// アドレスの種類を表すデータ構造が実装すべきtrait
 pub trait AddressType: Copy + Clone + PartialOrd + PartialEq {}
 
 /// Zero-sized type to mark a physical address.
+/// 物理アドレスであることを示す空の列挙体
 #[derive(Copy, Clone, PartialOrd, PartialEq)]
 pub enum Physical {}
 
 /// Zero-sized type to mark a virtual address.
+/// 仮想アドレスであることを示す空の列挙体
 #[derive(Copy, Clone, PartialOrd, PartialEq)]
 pub enum Virtual {}
 
 /// Generic address type.
+/// アドレスを表す構造体
 #[derive(Copy, Clone, PartialOrd, PartialEq)]
 pub struct Address<ATYPE: AddressType> {
+    // アドレス
     value: usize,
+    // アドレスの種類
     _address_type: PhantomData<fn() -> ATYPE>,
 }
 
@@ -39,11 +45,15 @@ pub struct Address<ATYPE: AddressType> {
 // Public Code
 //--------------------------------------------------------------------------------------------------
 
+// 物理アドレスであることを示す空の列挙体のAddressType traitの実装
 impl AddressType for Physical {}
+// 仮想アドレスであることを示す空の列挙体のAddressType traitの実装
 impl AddressType for Virtual {}
 
+// アドレスを表す構造体の実装
 impl<ATYPE: AddressType> Address<ATYPE> {
     /// Create an instance.
+    /// 新規作成
     pub const fn new(value: usize) -> Self {
         Self {
             value,
@@ -52,6 +62,7 @@ impl<ATYPE: AddressType> Address<ATYPE> {
     }
 
     /// Align down.
+    /// アライメントされたアドレスを返す関数
     pub const fn align_down(self, alignment: usize) -> Self {
         let aligned = common::align_down(self.value, alignment);
 
@@ -62,53 +73,65 @@ impl<ATYPE: AddressType> Address<ATYPE> {
     }
 
     /// Converts `Address` into an usize.
+    /// Address構造体をusize型に変換
     pub const fn into_usize(self) -> usize {
         self.value
     }
 }
 
+// Address構造体とusizeの足し算
 impl<ATYPE: AddressType> core::ops::Add<usize> for Address<ATYPE> {
     type Output = Self;
 
+    // usize型のアドレスを足した結果を返す
     fn add(self, other: usize) -> Self {
         Self {
+            // アドレスを足し算
             value: self.value + other,
             _address_type: PhantomData,
         }
     }
 }
 
+// Address構造体同士の足し算
 impl<ATYPE: AddressType> AddAssign for Address<ATYPE> {
     fn add_assign(&mut self, other: Self) {
         *self = Self {
+            // アドレスを足し算
             value: self.value + other.into_usize(),
             _address_type: PhantomData,
         };
     }
 }
 
+// Address構造体からusize型を引く
 impl<ATYPE: AddressType> core::ops::Sub<usize> for Address<ATYPE> {
     type Output = Self;
 
     fn sub(self, other: usize) -> Self {
         Self {
+            // アドレスを引き算
             value: self.value - other,
             _address_type: PhantomData,
         }
     }
 }
 
+// Address構造体同士の引き算
 impl<ATYPE: AddressType> SubAssign for Address<ATYPE> {
     fn sub_assign(&mut self, other: Self) {
         *self = Self {
+            // アドレスを引き算
             value: self.value - other.into_usize(),
             _address_type: PhantomData,
         };
     }
 }
 
+// 物理アドレスの書式
 impl fmt::Display for Address<Physical> {
     // Don't expect to see physical addresses greater than 40 bit.
+    // 物理アドレスの幅は40bit以下であると仮定している
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let q3: u8 = ((self.value >> 32) & 0xff) as u8;
         let q2: u16 = ((self.value >> 16) & 0xffff) as u16;
@@ -121,6 +144,7 @@ impl fmt::Display for Address<Physical> {
     }
 }
 
+// 仮想アドレスの書式
 impl fmt::Display for Address<Virtual> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let q4: u16 = ((self.value >> 48) & 0xffff) as u16;
