@@ -47,13 +47,13 @@ impl driver::interface::DriverManager for BSPDriverManager {
     }
 
     // 今回追加した関数
-    // 起動時の初期に使用する出力device driversを取得する?
+    // 出力を復活させるために優先的に初期化するdevice driversを取得する
     fn early_print_device_drivers(&self) -> &[&'static (dyn DeviceDriver + Sync)] {
         &self.device_drivers[0..=1]
     }
 
     // 今回追加した関数
-    // 初期化終了後に使用する出力device driversを取得する?
+    // それ以外のdevice driversを取得する
     fn non_early_print_device_drivers(&self) -> &[&'static (dyn DeviceDriver + Sync)] {
         &self.device_drivers[2..]
     }

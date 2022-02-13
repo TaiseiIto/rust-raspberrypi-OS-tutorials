@@ -111,7 +111,7 @@ use synchronization::interface::{Mutex, ReadWriteEx};
 // PeripheralIC構造体に対するdriver::interface::DeviceDriverの実装
 impl driver::interface::DeviceDriver for PeripheralIC {
     fn compatible(&self) -> &'static str {
-        // 謎の文字列を返している
+        // device名を返している
         "BCM Peripheral Interrupt Controller"
     }
 

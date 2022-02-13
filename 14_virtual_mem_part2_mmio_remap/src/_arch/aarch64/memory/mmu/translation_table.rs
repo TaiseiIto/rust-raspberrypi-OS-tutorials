@@ -412,7 +412,7 @@ impl<const NUM_TABLES: usize> memory::mmu::translation_table::interface::Transla
             return Err("Tried to map outside of physical address space");
         }
 
-        // 物理pageと仮想pageの組の配列を作ってforで順番に対応付けていく
+        // 物理pageと仮想pageの組のイテレータを作ってforで順番に対応付けていく
         let iter = p.iter().zip(v.iter());
         for (phys_page, virt_page) in iter {
             // 仮想pageのpage_descriptor

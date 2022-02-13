@@ -82,7 +82,7 @@ use translation_table::interface::TranslationTable;
 /// Map pages in the kernel's translation tables.
 /// kernelのtranslation tableにpagesをmapする
 /// No input checks done, input is passed through to the architectural implementation.
-/// 与えられた引数がMMIO領域でないことはこの関数の呼び出し元が保証している
+/// MMIO領域のmappingにも使用するため，与えられた引数がMMIO領域でないことはこの関数の呼び出し元が保証する必要がある
 /// # Safety
 ///
 /// - See `map_pages_at()`.
@@ -97,7 +97,7 @@ unsafe fn kernel_map_pages_at_unchecked(
     bsp::memory::mmu::kernel_translation_tables()
         .write(|tables| tables.map_pages_at(virt_pages, phys_pages, attr))?;
 
-    // エラーが返ってきたらエラーメッセージを表示
+    // mapping内容を記録し，エラーが返ってきたらエラーメッセージを表示
     if let Err(x) = mapping_record::kernel_add(name, virt_pages, phys_pages, attr) {
         warn!("{}", x);
     }
@@ -197,14 +197,15 @@ pub unsafe fn kernel_map_mmio(
         mmio_descriptor.start_addr().into_usize() & bsp::memory::mmu::KernelGranule::MASK;
 
     // Check if an identical page slice has been mapped for another driver. If so, reuse it.
-    // MMIO領域がすでに別のdriverにmapされている場合，それを再利用する
+    // mapping要求されたMMIO領域の物理pagesがすでに別のdriverにmapされている場合，それを再利用する
     let virt_addr = if let Some(addr) =
         mapping_record::kernel_find_and_insert_mmio_duplicate(mmio_descriptor, name)
     {
+        // 当該MMIO領域の仮想addressを返す
         addr
     // Otherwise, allocate a new virtual page slice and map it.
+    // そうでない場合，新しくMMIO領域をmappingする
     } else {
-        // MMIO領域がmapされていない場合，新しい仮想page sliceを割り当てる
         // 未使用の仮想pagesを探す
         let virt_pages: PageSliceDescriptor<Virtual> =
             bsp::memory::mmu::kernel_translation_tables()

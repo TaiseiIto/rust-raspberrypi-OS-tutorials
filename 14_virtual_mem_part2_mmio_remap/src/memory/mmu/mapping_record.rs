@@ -5,7 +5,7 @@
 //! A record of mapped pages.
 
 // 今回追加されたファイル
-// 過去のmappingを記憶することで，既存のmappingを再利用したり，以前のmappingを追跡してmappingの統計情報を表示できるようにする．
+// mappingを記憶することで，既存のmappingを再利用したり，mappingの内容を表示できるようにする．
 
 use super::{
     AccessPermissions, Address, AttributeFields, MMIODescriptor, MemAttributes,
@@ -22,7 +22,7 @@ use crate::{info, synchronization, synchronization::InitStateLock, warn};
 #[derive(Copy, Clone)]
 struct MappingRecordEntry {
     // 仮想memory mapping記述子
-    // usersって何だ?
+    // usersはpagesを使用しているdevice driverの名前
     pub users: [Option<&'static str>; 5],
     // 物理page
     pub phys_pages: PageSliceDescriptor<Physical>,
@@ -188,10 +188,10 @@ impl MappingRecord {
                 attr,
                 acc_p,
                 xn,
-                i.users[0].unwrap()
+                i.users[0].unwrap() // Device driver名
             );
 
-            // user名の表示
+            // その他のDevice driver名の表示
             for k in i.users[1..].iter() {
                 if let Some(additional_user) = *k {
                     info!(
