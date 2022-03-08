@@ -107,6 +107,10 @@ start address of the kernel's virtual address space, calculated as `(u64::MAX -
 __kernel_virt_addr_space_size) + 1`. Before the first section definition, we set the linker script's
 location counter to this address:
 
+`link.ld` linker scriptで，我々は新しいsymbol`__kernel_virt_start_addr`を定義する．
+これは`(u64::MAX - __kernel_virt_addr_space_size) + 1`と定義される仮想address空間におけるkernelの始点addressだ．
+最初のsectionの定義の前に，我々はlinker scriptのlocation counterをこのaddressに設定する．
+
 ```ld.s
 SECTIONS
 {
@@ -121,6 +125,8 @@ SECTIONS
 
 Since we are not identity mapping anymore, we start to make use of the `AT` keyword in the output
 section specification:
+
+もはや恒等mappingではないので，出力sectionの列挙で`AT`keywordを使うこととする．
 
 ```ld.s
 /* The physical address at which the the kernel binary will be loaded by the Raspberry's firmware */
@@ -140,6 +146,8 @@ SECTIONS
 
 This will manifest in the kernel ELF `segment` attributes, as can be inspected using the `make
 readelf` command:
+
+これは`make readelf`commandで確認できるkernel ELFの`segment`属性を示す．
 
 ```console
 $ make readelf
@@ -166,11 +174,20 @@ As you can see, `VirtAddr` and `PhysAddr` are different now, as compared to all 
 tutorials where they were identical. This information from the `ELF` file will eventually be parsed
 by the `translation table tool` and incorporated when compiling the precomputed translation tables.
 
+見ての通り，`VirtAddr`と`PhysAddr`が異なっている．
+前回までのtutorialsでは恒等写像でこれらは等しかった．
+`ELF`fileに由来するこの情報は最終的には`translation table tool`によってparseされ，precomputed translation tablesをcompileするときに組み込まれる．
+
 You might have noticed that `.text .rodata` and `.boot_core_stack` exchanged places as compared to
 previous tutorials. The reason this was done is that with a remapped kernel, this is trivial to do
 without affecting the physical layout. This allows us to place an unmapped `guard page` between the
 `boot core stack` and the `mmio remap region` in the VA space, which nicely protects the kernel from
 stack overflows now:
+
+`.text .rodate`と`.boot_core_stack`の場所が入れ替わっていることに気づいただろうか．
+この入れ替えがなされた理由は，kernelがremapされていることによって，物理address空間に影響を与えることなく簡単にできるからだ．
+これにより，仮想address空間内の`boot core stack`と`mmio remap region`の間に，物理address空間にmapされない`guard page`を置けるようになる．
+こうすることで，kernelをstack overflowから守れる．
 
 ```ld.s
 /***********************************************************************************************
@@ -205,20 +222,34 @@ ASSERT((. & PAGE_MASK) == 0, "End of boot core stack is not page aligned")
 Changes in the `_arch` `MMU` driver are minimal, and mostly concerned with configuring `TCR_EL1` for
 use with `TTBR1_EL1` now. And of course, setting `TTBR1_EL1` in `fn enable_mmu_and_caching(...)`.
 
+`_arch` `MMU` driverの変更は少なく，ほとんどは`TTBR1_EL1`を使うための`TCR_EL1`に関係するものである．
+そして，`fn enable_mmu_and_caching(...)`において`TTBR1_EL1`を設定する．
+
 ### Position-Independent Boot Code
+### 位置非依存Boot Code
 
 Remember all the fuss that we made about `position-independent code` that will be needed until the
 `MMU` is enabled. Let's quickly check what it means for us in reality now:
 
+`MMU`を有効にするまでに必要となる`position-independent code`について行った全ての議論を思い出そう．
+これが今どんな意味を持つのか確認してみよう．
+
 In `_arch/aarch64/cpu/boot.rs`, we turn on the `MMU` just before returning from `EL2` to `EL1`. So
 by the time the CPU enters `EL1`, virtual memory will be active, and the CPU must therefore use the
 new higher-half `virtual addresses` for everything it does.
+
+`__arch/aarch64/cpu/boot.rs`において，`EL2`から`EL1`に戻る直前に`MMU`を起動する．
+故にCPUが`EL1`に入るときに，仮想memoryが有効になり，CPUは新しいhigher-halfの`virtual addresses`を使うようになるはずだ．
 
 Specifically, this means the address from which the CPU should execute upon entering `EL1` (function
 `kernel_init()`) must be a valid _virtual address_, same as the stack pointer's address. Both of
 them are programmed in function `fn prepare_el2_to_el1_transition(...)`, so we must ensure now that
 _link-time_ addresses are used here. For this reason, retrieval of these addresses happens in
 `assembly` in `boot.s`, where we can explicitly enforce generation of **absolute** addresses:
+
+つまり，これはCPUが`EL1`に切り替わるにあたって実行すべきaddress(`kernel_init()`関数)が，stack pointerのaddressと同様に有効な _virtual address_ でなければならないことを意味する．
+これらは両方とも`fn prepare_el2_to_el1_translation(...)`関数で定められているため，我々は _link-time_ addressがここで使われていることを保証しなければならない．
+このため，これらのaddressesの検索が，**absolute** addressの生成を強制できる`boot.s`の`assembly`で起こる．
 
 ```asm
 // Load the _absolute_ addresses of the following symbols. Since the kernel is linked at
