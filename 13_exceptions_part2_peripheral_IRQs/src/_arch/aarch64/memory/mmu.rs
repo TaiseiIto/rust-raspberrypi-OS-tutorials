@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Memory Management Unit Driver.
 //!
@@ -18,7 +18,8 @@ use crate::{
     memory::mmu::{translation_table::KernelTranslationTable, TranslationGranule},
 };
 use core::intrinsics::unlikely;
-use cortex_a::{barrier, regs::*};
+use cortex_a::{asm::barrier, registers::*};
+use tock_registers::interfaces::{ReadWriteable, Readable, Writeable};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions
@@ -136,7 +137,7 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
         // Populate translation tables.
         KERNEL_TABLES
             .populate_tt_entries()
-            .map_err(|e| MMUEnableError::Other(e))?;
+            .map_err(MMUEnableError::Other)?;
 
         // Set the "Translation Table Base Register".
         TTBR0_EL1.set_baddr(KERNEL_TABLES.phys_base_address());
@@ -170,12 +171,23 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::{cell::UnsafeCell, ops::Range};
     use test_macros::kernel_test;
 
     /// Check if KERNEL_TABLES is in .bss.
     #[kernel_test]
     fn kernel_tables_in_bss() {
-        let bss_range = bsp::memory::bss_range_inclusive();
+        extern "Rust" {
+            static __bss_start: UnsafeCell<u64>;
+            static __bss_end_exclusive: UnsafeCell<u64>;
+        }
+
+        let bss_range = unsafe {
+            Range {
+                start: __bss_start.get(),
+                end: __bss_end_exclusive.get(),
+            }
+        };
         let kernel_tables_addr = unsafe { &KERNEL_TABLES as *const _ as usize as *mut u64 };
 
         assert!(bss_range.contains(&kernel_tables_addr));

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Memory Management Unit Driver.
 //!
@@ -15,10 +15,11 @@
 
 use crate::{
     bsp, memory,
-    memory::{mmu::TranslationGranule, Address, Physical, Virtual},
+    memory::{mmu::TranslationGranule, Address, Physical},
 };
 use core::intrinsics::unlikely;
-use cortex_a::{barrier, regs::*};
+use cortex_a::{asm::barrier, registers::*};
+use tock_registers::interfaces::{ReadWriteable, Readable, Writeable};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions
@@ -108,7 +109,7 @@ pub fn mmu() -> &'static impl memory::mmu::interface::MMU {
 //------------------------------------------------------------------------------
 // OS Interface Code
 //------------------------------------------------------------------------------
-use memory::mmu::{MMUEnableError, TranslationError};
+use memory::mmu::MMUEnableError;
 
 impl memory::mmu::interface::MMU for MemoryManagementUnit {
     unsafe fn enable_mmu_and_caching(
@@ -130,7 +131,7 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
         self.set_up_mair();
 
         // Set the "Translation Table Base Register".
-        TTBR0_EL1.set_baddr(phys_tables_base_addr.into_usize() as u64);
+        TTBR0_EL1.set_baddr(phys_tables_base_addr.as_usize() as u64);
 
         self.configure_translation_control();
 
@@ -151,32 +152,5 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
     #[inline(always)]
     fn is_enabled(&self) -> bool {
         SCTLR_EL1.matches_all(SCTLR_EL1::M::Enable)
-    }
-
-    fn try_virt_to_phys(
-        &self,
-        virt: Address<Virtual>,
-    ) -> Result<Address<Physical>, TranslationError> {
-        if !self.is_enabled() {
-            return Err(TranslationError::MMUDisabled);
-        }
-
-        let addr = virt.into_usize() as u64;
-        unsafe {
-            asm!(
-            "AT S1E1R, {0}",
-            in(reg) addr,
-            options(readonly, nostack, preserves_flags)
-            );
-        }
-
-        let par_el1 = PAR_EL1.extract();
-        if par_el1.matches_all(PAR_EL1::F::TranslationAborted) {
-            return Err(TranslationError::Aborted);
-        }
-
-        let phys_addr = (par_el1.read(PAR_EL1::PA) << 12) | (addr & 0xFFF);
-
-        Ok(Address::new(phys_addr as usize))
     }
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Peripheral Interrupt Controller Driver.
 
@@ -11,7 +11,11 @@ use crate::{
     driver, exception, memory, synchronization,
     synchronization::{IRQSafeNullLock, InitStateLock},
 };
-use register::{mmio::*, register_structs};
+use tock_registers::{
+    interfaces::{Readable, Writeable},
+    register_structs,
+    registers::{ReadOnly, WriteOnly},
+};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions
@@ -79,7 +83,7 @@ impl PeripheralIC {
     /// 引数でMMIOの先頭仮想addressを渡していたのをMMIODescriptorを渡すようにしている
     pub const unsafe fn new(mmio_descriptor: memory::mmu::MMIODescriptor) -> Self {
         // MMIODescriptorからMMIOの先頭仮想addressを取得
-        let addr = mmio_descriptor.start_addr().into_usize();
+        let addr = mmio_descriptor.start_addr().as_usize();
 
         Self {
             // 新しい要素mmio_descriptor, wo_registers, ro_registersを追加
@@ -97,7 +101,7 @@ impl PeripheralIC {
         self.ro_registers.read(|regs| {
             let pending_mask: u64 =
                 (u64::from(regs.PENDING_2.get()) << 32) | u64::from(regs.PENDING_1.get());
-                // PENDING_1とPENDING_2というのがあって，それらをorで合わせてるらしい(わからん)
+            // PENDING_1とPENDING_2というのがあって，それらをorで合わせてるらしい(わからん)
             PendingIRQs::new(pending_mask)
         })
     }
@@ -119,7 +123,7 @@ impl driver::interface::DeviceDriver for PeripheralIC {
     unsafe fn init(&self) -> Result<(), &'static str> {
         // MMIOの先頭仮想addressの取得
         let virt_addr =
-            memory::mmu::kernel_map_mmio(self.compatible(), &self.mmio_descriptor)?.into_usize();
+            memory::mmu::kernel_map_mmio(self.compatible(), &self.mmio_descriptor)?.as_usize();
 
         // Write Only registersとRead Only registersの初期化
         self.wo_registers

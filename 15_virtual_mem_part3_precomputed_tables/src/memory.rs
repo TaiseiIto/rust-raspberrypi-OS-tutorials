@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Memory Management.
 
 pub mod mmu;
 
-use crate::common;
+use crate::{bsp, common};
 use core::{
-    convert::TryFrom,
     fmt,
     marker::PhantomData,
-    ops::{AddAssign, RangeInclusive, SubAssign},
+    ops::{Add, Sub},
 };
 
 //--------------------------------------------------------------------------------------------------
@@ -22,15 +21,15 @@ use core::{
 pub trait AddressType: Copy + Clone + PartialOrd + PartialEq {}
 
 /// Zero-sized type to mark a physical address.
-#[derive(Copy, Clone, PartialOrd, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub enum Physical {}
 
 /// Zero-sized type to mark a virtual address.
-#[derive(Copy, Clone, PartialOrd, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub enum Virtual {}
 
 /// Generic address type.
-#[derive(Copy, Clone, PartialOrd, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub struct Address<ATYPE: AddressType> {
     value: usize,
     _address_type: PhantomData<fn() -> ATYPE>,
@@ -52,67 +51,59 @@ impl<ATYPE: AddressType> Address<ATYPE> {
         }
     }
 
-    /// Align down.
-    pub const fn align_down(self, alignment: usize) -> Self {
-        let aligned = common::align_down(self.value, alignment);
-
-        Self {
-            value: aligned,
-            _address_type: PhantomData,
-        }
-    }
-
-    /// Converts `Address` into an usize.
-    pub const fn into_usize(self) -> usize {
+    /// Convert to usize.
+    pub const fn as_usize(self) -> usize {
         self.value
     }
-}
 
-impl TryFrom<Address<Virtual>> for Address<Physical> {
-    type Error = mmu::TranslationError;
+    /// Align down to page size.
+    #[must_use]
+    pub const fn align_down_page(self) -> Self {
+        let aligned = common::align_down(self.value, bsp::memory::mmu::KernelGranule::SIZE);
 
-    fn try_from(virt: Address<Virtual>) -> Result<Self, Self::Error> {
-        mmu::try_virt_to_phys(virt)
+        Self::new(aligned)
+    }
+
+    /// Align up to page size.
+    #[must_use]
+    pub const fn align_up_page(self) -> Self {
+        let aligned = common::align_up(self.value, bsp::memory::mmu::KernelGranule::SIZE);
+
+        Self::new(aligned)
+    }
+
+    /// Checks if the address is page aligned.
+    pub const fn is_page_aligned(&self) -> bool {
+        common::is_aligned(self.value, bsp::memory::mmu::KernelGranule::SIZE)
+    }
+
+    /// Return the address' offset into the corresponding page.
+    pub const fn offset_into_page(&self) -> usize {
+        self.value & bsp::memory::mmu::KernelGranule::MASK
     }
 }
 
-impl<ATYPE: AddressType> core::ops::Add<usize> for Address<ATYPE> {
+impl<ATYPE: AddressType> Add<usize> for Address<ATYPE> {
     type Output = Self;
 
-    fn add(self, other: usize) -> Self {
-        Self {
-            value: self.value + other,
-            _address_type: PhantomData,
+    #[inline(always)]
+    fn add(self, rhs: usize) -> Self::Output {
+        match self.value.checked_add(rhs) {
+            None => panic!("Overflow on Address::add"),
+            Some(x) => Self::new(x),
         }
     }
 }
 
-impl<ATYPE: AddressType> AddAssign for Address<ATYPE> {
-    fn add_assign(&mut self, other: Self) {
-        *self = Self {
-            value: self.value + other.into_usize(),
-            _address_type: PhantomData,
-        };
-    }
-}
-
-impl<ATYPE: AddressType> core::ops::Sub<usize> for Address<ATYPE> {
+impl<ATYPE: AddressType> Sub<Address<ATYPE>> for Address<ATYPE> {
     type Output = Self;
 
-    fn sub(self, other: usize) -> Self {
-        Self {
-            value: self.value - other,
-            _address_type: PhantomData,
+    #[inline(always)]
+    fn sub(self, rhs: Address<ATYPE>) -> Self::Output {
+        match self.value.checked_sub(rhs.value) {
+            None => panic!("Overflow on Address::sub"),
+            Some(x) => Self::new(x),
         }
-    }
-}
-
-impl<ATYPE: AddressType> SubAssign for Address<ATYPE> {
-    fn sub_assign(&mut self, other: Self) {
-        *self = Self {
-            value: self.value - other.into_usize(),
-            _address_type: PhantomData,
-        };
     }
 }
 
@@ -145,25 +136,6 @@ impl fmt::Display for Address<Virtual> {
     }
 }
 
-/// Zero out an inclusive memory range.
-///
-/// # Safety
-///
-/// - `range.start` and `range.end` must be valid.
-/// - `range.start` and `range.end` must be `T` aligned.
-pub unsafe fn zero_volatile<T>(range: RangeInclusive<*mut T>)
-where
-    T: From<u8>,
-{
-    let mut ptr = *range.start();
-    let end_inclusive = *range.end();
-
-    while ptr <= end_inclusive {
-        core::ptr::write_volatile(ptr, T::from(0));
-        ptr = ptr.offset(1);
-    }
-}
-
 //--------------------------------------------------------------------------------------------------
 // Testing
 //--------------------------------------------------------------------------------------------------
@@ -173,30 +145,23 @@ mod tests {
     use super::*;
     use test_macros::kernel_test;
 
-    /// Check `zero_volatile()`.
+    /// Sanity of [Address] methods.
     #[kernel_test]
-    fn zero_volatile_works() {
-        let mut x: [usize; 3] = [10, 11, 12];
-        let x_range = x.as_mut_ptr_range();
-        let x_range_inclusive =
-            RangeInclusive::new(x_range.start, unsafe { x_range.end.offset(-1) });
+    fn address_type_method_sanity() {
+        let addr = Address::<Virtual>::new(bsp::memory::mmu::KernelGranule::SIZE + 100);
 
-        unsafe { zero_volatile(x_range_inclusive) };
+        assert_eq!(
+            addr.align_down_page().as_usize(),
+            bsp::memory::mmu::KernelGranule::SIZE
+        );
 
-        assert_eq!(x, [0, 0, 0]);
-    }
+        assert_eq!(
+            addr.align_up_page().as_usize(),
+            bsp::memory::mmu::KernelGranule::SIZE * 2
+        );
 
-    /// Check `bss` section layout.
-    #[kernel_test]
-    fn bss_section_is_sane() {
-        use crate::bsp::memory::bss_range_inclusive;
-        use core::mem;
+        assert_eq!(addr.is_page_aligned(), false);
 
-        let start = *bss_range_inclusive().start() as usize;
-        let end = *bss_range_inclusive().end() as usize;
-
-        assert_eq!(start % mem::size_of::<usize>(), 0);
-        assert_eq!(end % mem::size_of::<usize>(), 0);
-        assert!(end >= start);
+        assert_eq!(addr.offset_into_page(), 100);
     }
 }

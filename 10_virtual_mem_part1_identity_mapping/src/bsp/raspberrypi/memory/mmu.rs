@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! BSP Memory Management Unit.
 
@@ -26,16 +26,17 @@ pub static LAYOUT: KernelVirtualLayout<NUM_MEM_RANGES> = KernelVirtualLayout::ne
     memory_map::END_INCLUSIVE,
     [
         TranslationDescriptor {
-            name: "Kernel code and RO data", // 名前
-            virtual_range: rx_range_inclusive, // 仮想memory上の範囲
-            physical_range_translation: Translation::Identity, // 仮想addressと物理addressとの対応関係
-            attribute_fields: AttributeFields { // 属性
+            name: "Kernel code and RO data",
+            virtual_range: code_range_inclusive,
+            physical_range_translation: Translation::Identity,
+            attribute_fields: AttributeFields {
                 mem_attributes: MemAttributes::CacheableDRAM,
                 acc_perms: AccessPermissions::ReadOnly,
                 execute_never: false,
             },
         },
-        TranslationDescriptor { // 仮想memoryにRemapされたDevice MMIO
+        TranslationDescriptor {
+            // 仮想memoryにRemapされたDevice MMIO
             name: "Remapped Device MMIO",
             virtual_range: remapped_mmio_range_inclusive,
             physical_range_translation: Translation::Offset(memory_map::mmio::START + 0x20_0000),
@@ -45,7 +46,8 @@ pub static LAYOUT: KernelVirtualLayout<NUM_MEM_RANGES> = KernelVirtualLayout::ne
                 execute_never: true,
             },
         },
-        TranslationDescriptor { // 素のDevice MMIO
+        TranslationDescriptor {
+            // 素のDevice MMIO
             name: "Device MMIO",
             virtual_range: mmio_range_inclusive,
             physical_range_translation: Translation::Identity,
@@ -62,10 +64,10 @@ pub static LAYOUT: KernelVirtualLayout<NUM_MEM_RANGES> = KernelVirtualLayout::ne
 // Private Code
 //--------------------------------------------------------------------------------------------------
 
-fn rx_range_inclusive() -> RangeInclusive<usize> {
+fn code_range_inclusive() -> RangeInclusive<usize> {
     // Notice the subtraction to turn the exclusive end into an inclusive end.
     #[allow(clippy::range_minus_one)]
-    RangeInclusive::new(super::rx_start(), super::rx_end_exclusive() - 1)
+    RangeInclusive::new(super::code_start(), super::code_end_exclusive() - 1)
 }
 
 fn remapped_mmio_range_inclusive() -> RangeInclusive<usize> {

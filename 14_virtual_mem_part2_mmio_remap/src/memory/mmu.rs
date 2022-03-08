@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Memory Management Unit.
 
@@ -8,6 +8,7 @@
 #[path = "../_arch/aarch64/memory/mmu.rs"]
 mod arch_mmu;
 
+mod alloc;
 mod mapping_record;
 mod translation_table;
 mod types;
@@ -17,7 +18,7 @@ use crate::{
     memory::{Address, Physical, Virtual},
     synchronization, warn,
 };
-use core::fmt;
+use core::{fmt, num::NonZeroUsize};
 
 pub use types::*;
 
@@ -76,29 +77,38 @@ pub trait AssociatedTranslationTable {
 // Private Code
 //--------------------------------------------------------------------------------------------------
 use interface::MMU;
-use synchronization::interface::ReadWriteEx;
+use synchronization::interface::*;
 use translation_table::interface::TranslationTable;
 
-/// Map pages in the kernel's translation tables.
 /// kernelのtranslation tableにpagesをmapする
-/// No input checks done, input is passed through to the architectural implementation.
-/// MMIO領域のmappingにも使用するため，与えられた引数がMMIO領域でないことはこの関数の呼び出し元が保証する必要がある
-/// # Safety
+/// Query the BSP for the reserved virtual addresses for MMIO remapping and initialize the kernel's
+/// MMIO VA allocator with it.
+fn kernel_init_mmio_va_allocator() {
+    let region = bsp::memory::mmu::virt_mmio_remap_region();
+
+    alloc::kernel_mmio_va_allocator().lock(|allocator| allocator.initialize(region));
+}
+
+/// Map a region in the kernel's translation tables.
 ///
-/// - See `map_pages_at()`.
+/// No input checks done, input is passed through to the architectural implementation.
+/// MMIO領域のmappingにも使用するため，
+/// 与えられた引数がMMIO領域でないことはこの関数の呼び出し元が保証する必要がある # Safety
+///
+/// - See `map_at()`.
 /// - Does not prevent aliasing.
-unsafe fn kernel_map_pages_at_unchecked(
+unsafe fn kernel_map_at_unchecked(
     name: &'static str,
-    virt_pages: &PageSliceDescriptor<Virtual>, // 仮想page
-    phys_pages: &PageSliceDescriptor<Physical>, // 物理page
-    attr: &AttributeFields, // メモリ属性
+    virt_region: &MemoryRegion<Virtual>,
+    phys_region: &MemoryRegion<Physical>,
+    attr: &AttributeFields,
 ) -> Result<(), &'static str> {
     // kernelのtranslation tableに新たな仮想pageを新たな物理pageに対応付ける
     bsp::memory::mmu::kernel_translation_tables()
-        .write(|tables| tables.map_pages_at(virt_pages, phys_pages, attr))?;
+        .write(|tables| tables.map_at(virt_region, phys_region, attr))?;
 
     // mapping内容を記録し，エラーが返ってきたらエラーメッセージを表示
-    if let Err(x) = mapping_record::kernel_add(name, virt_pages, phys_pages, attr) {
+    if let Err(x) = mapping_record::kernel_add(name, virt_region, phys_region, attr) {
         warn!("{}", x);
     }
 
@@ -153,28 +163,28 @@ impl<const AS_SIZE: usize> AddressSpace<AS_SIZE> {
     }
 }
 
-/// Raw mapping of virtual to physical pages in the kernel translation tables.
+/// Raw mapping of a virtual to physical region in the kernel translation tables.
 /// kernel translation tablesで仮想pageを物理pageに対応付ける
+///
 /// Prevents mapping into the MMIO range of the tables.
 /// MMIO領域のmappingはエラーを返して防止する
 /// # Safety
 ///
-/// - See `kernel_map_pages_at_unchecked()`.
+/// - See `kernel_map_at_unchecked()`.
 /// - Does not prevent aliasing. Currently, the callers must be trusted.
-pub unsafe fn kernel_map_pages_at(
+pub unsafe fn kernel_map_at(
     name: &'static str,
-    virt_pages: &PageSliceDescriptor<Virtual>,
-    phys_pages: &PageSliceDescriptor<Physical>,
+    virt_region: &MemoryRegion<Virtual>,
+    phys_region: &MemoryRegion<Physical>,
     attr: &AttributeFields,
 ) -> Result<(), &'static str> {
     // 引数で与えられた仮想pageがMMIO領域でないことを確認
-    let is_mmio = bsp::memory::mmu::kernel_translation_tables()
-        .read(|tables| tables.is_virt_page_slice_mmio(virt_pages));
-    if is_mmio {
+    if bsp::memory::mmu::virt_mmio_remap_region().overlaps(virt_region) {
         return Err("Attempt to manually map into MMIO region");
     }
+
     // 仮想pageを物理pageにメモリ属性を指定して対応付ける
-    kernel_map_pages_at_unchecked(name, virt_pages, phys_pages, attr)?;
+    kernel_map_at_unchecked(name, virt_region, phys_region, attr)?;
 
     Ok(())
 }
@@ -185,37 +195,40 @@ pub unsafe fn kernel_map_pages_at(
 /// この関数はDevice driverによって使用される
 /// # Safety
 ///
-/// - Same as `kernel_map_pages_at_unchecked()`, minus the aliasing part.
+/// - Same as `kernel_map_at_unchecked()`, minus the aliasing part.
 pub unsafe fn kernel_map_mmio(
     name: &'static str,
     mmio_descriptor: &MMIODescriptor,
 ) -> Result<Address<Virtual>, &'static str> {
     // MMIO領域の物理pages
-    let phys_pages: PageSliceDescriptor<Physical> = (*mmio_descriptor).into();
+    let phys_region = MemoryRegion::from(*mmio_descriptor);
     // MMIO領域のページ内における相対開始address
-    let offset_into_start_page =
-        mmio_descriptor.start_addr().into_usize() & bsp::memory::mmu::KernelGranule::MASK;
+    let offset_into_start_page = mmio_descriptor.start_addr().offset_into_page();
 
-    // Check if an identical page slice has been mapped for another driver. If so, reuse it.
+    // Check if an identical region has been mapped for another driver. If so, reuse it.
     // mapping要求されたMMIO領域の物理pagesがすでに別のdriverにmapされている場合，それを再利用する
     let virt_addr = if let Some(addr) =
         mapping_record::kernel_find_and_insert_mmio_duplicate(mmio_descriptor, name)
     {
         // 当該MMIO領域の仮想addressを返す
         addr
-    // Otherwise, allocate a new virtual page slice and map it.
+    // Otherwise, allocate a new region and map it.
     // そうでない場合，新しくMMIO領域をmappingする
     } else {
         // 未使用の仮想pagesを探す
-        let virt_pages: PageSliceDescriptor<Virtual> =
-            bsp::memory::mmu::kernel_translation_tables()
-                .write(|tables| tables.next_mmio_virt_page_slice(phys_pages.num_pages()))?;
+        let num_pages = match NonZeroUsize::new(phys_region.num_pages()) {
+            None => return Err("Requested 0 pages"),
+            Some(x) => x,
+        };
+
+        let virt_region =
+            alloc::kernel_mmio_va_allocator().lock(|allocator| allocator.alloc(num_pages))?;
 
         // 新しい仮想pagesを割り当てる
-        kernel_map_pages_at_unchecked(
+        kernel_map_at_unchecked(
             name,
-            &virt_pages,
-            &phys_pages,
+            &virt_region,
+            &phys_region,
             &AttributeFields {
                 mem_attributes: MemAttributes::Device,
                 acc_perms: AccessPermissions::ReadWrite,
@@ -223,7 +236,7 @@ pub unsafe fn kernel_map_mmio(
             },
         )?;
 
-        virt_pages.start_addr()
+        virt_region.start_addr()
     };
 
     // MMIO領域の開始仮想address
@@ -262,8 +275,51 @@ pub unsafe fn enable_mmu_and_caching(
     arch_mmu::mmu().enable_mmu_and_caching(phys_tables_base_addr)
 }
 
+/// Finish initialization of the MMU subsystem.
+pub fn post_enable_init() {
+    kernel_init_mmio_va_allocator();
+}
+
 /// Human-readable print of all recorded kernel mappings.
 /// kernel mappingsを読みやすいように表示する
 pub fn kernel_print_mappings() {
     mapping_record::kernel_print()
+}
+
+//--------------------------------------------------------------------------------------------------
+// Testing
+//--------------------------------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::memory::mmu::{AccessPermissions, MemAttributes, PageAddress};
+    use test_macros::kernel_test;
+
+    /// Check that you cannot map into the MMIO VA range from kernel_map_at().
+    #[kernel_test]
+    fn no_manual_mmio_map() {
+        let phys_start_page_addr: PageAddress<Physical> = PageAddress::from(0);
+        let phys_end_exclusive_page_addr: PageAddress<Physical> =
+            phys_start_page_addr.checked_offset(5).unwrap();
+        let phys_region = MemoryRegion::new(phys_start_page_addr, phys_end_exclusive_page_addr);
+
+        let num_pages = NonZeroUsize::new(phys_region.num_pages()).unwrap();
+        let virt_region = alloc::kernel_mmio_va_allocator()
+            .lock(|allocator| allocator.alloc(num_pages))
+            .unwrap();
+
+        let attr = AttributeFields {
+            mem_attributes: MemAttributes::CacheableDRAM,
+            acc_perms: AccessPermissions::ReadWrite,
+            execute_never: true,
+        };
+
+        unsafe {
+            assert_eq!(
+                kernel_map_at("test", &virt_region, &phys_region, &attr),
+                Err("Attempt to manually map into MMIO region")
+            )
+        };
+    }
 }

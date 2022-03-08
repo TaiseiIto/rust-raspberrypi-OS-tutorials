@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! PL011 UART driver.
 //!
@@ -14,7 +14,11 @@ use crate::{
     synchronization, synchronization::IRQSafeNullLock,
 };
 use core::fmt;
-use register::{mmio::*, register_bitfields, register_structs};
+use tock_registers::{
+    interfaces::{Readable, Writeable},
+    register_bitfields, register_structs,
+    registers::{ReadOnly, ReadWrite, WriteOnly},
+};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions
@@ -42,12 +46,6 @@ register_bitfields! {
         /// - If the FIFO is disabled, this bit is set when the transmit holding register is full.
         /// - If the FIFO is enabled, the TXFF bit is set when the transmit FIFO is full.
         TXFF OFFSET(5) NUMBITS(1) [],
-
-        /// Receive FIFO empty. The meaning of this bit depends on the state of the FEN bit in the
-        /// LCR_H Register.
-        ///
-        /// If the FIFO is disabled, this bit is set when the receive holding register is empty. If
-        /// the FIFO is enabled, the RXFE bit is set when the receive FIFO is empty.
 
         /// Receive FIFO empty. The meaning of this bit depends on the state of the FEN bit in the
         /// LCR_H Register.
@@ -81,6 +79,7 @@ register_bitfields! {
     LCR_H [
         /// Word length. These bits indicate the number of data bits transmitted or received in a
         /// frame.
+        #[allow(clippy::enum_variant_names)]
         WLEN OFFSET(5) NUMBITS(2) [
             FiveBit = 0b00,
             SixBit = 0b01,

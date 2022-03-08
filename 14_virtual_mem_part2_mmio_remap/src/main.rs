@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 // Rust embedded logo for `make doc`.
 #![doc(html_logo_url = "https://git.io/JeGIp")]
@@ -40,6 +40,8 @@ unsafe fn kernel_init() -> ! {
     }
     // Printing will silently fail from here on, because the driver's MMIO is not remapped yet.
     // MMIOがremapされるまで出力できなくなる．
+
+    memory::mmu::post_enable_init();
 
     // Bring up the drivers needed for printing first.
     // early_print_devide_driversの初期化

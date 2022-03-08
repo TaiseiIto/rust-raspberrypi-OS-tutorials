@@ -16,6 +16,10 @@
 - `src/console.rs` introduces interface `Traits` for console commands.
 - `src/bsp/raspberrypi/console.rs` implements the interface for QEMU's emulated UART.
 - The panic handler makes use of the new `print!()` to display user error messages.
+- There is a new Makefile target, `make test`, intended for automated testing. It boots the compiled
+  kernel in `QEMU`, and checks for an expected output string produced by the kernel.
+    - In this tutorial, it checks for the string `Stopping here`, which is emitted by the `panic!()`
+      at the end of `main.rs`.
 
 - `src/console.rs`はconsole comands向けのinterfacesの`Traits`を導入する．
 - `src/bsp/raspberrypi/console.rs`はQEMUでemulateされるUART向けのinterfaceを実装する．
@@ -47,13 +51,13 @@ diff -uNr 02_runtime_init/Cargo.toml 03_hacky_hello_world/Cargo.toml
 -version = "0.2.0"
 +version = "0.3.0"
  authors = ["Andre Richter <andre.o.richter@gmail.com>"]
- edition = "2018"
+ edition = "2021"
 
 
 diff -uNr 02_runtime_init/Makefile 03_hacky_hello_world/Makefile
 --- 02_runtime_init/Makefile
 +++ 03_hacky_hello_world/Makefile
-@@ -13,7 +13,7 @@
+@@ -24,7 +24,7 @@
      KERNEL_BIN        = kernel8.img
      QEMU_BINARY       = qemu-system-aarch64
      QEMU_MACHINE_TYPE = raspi3
@@ -62,7 +66,7 @@ diff -uNr 02_runtime_init/Makefile 03_hacky_hello_world/Makefile
      OBJDUMP_BINARY    = aarch64-none-elf-objdump
      NM_BINARY         = aarch64-none-elf-nm
      READELF_BINARY    = aarch64-none-elf-readelf
-@@ -24,7 +24,7 @@
+@@ -35,7 +35,7 @@
      KERNEL_BIN        = kernel8.img
      QEMU_BINARY       = qemu-system-aarch64
      QEMU_MACHINE_TYPE =
@@ -71,6 +75,59 @@ diff -uNr 02_runtime_init/Makefile 03_hacky_hello_world/Makefile
      OBJDUMP_BINARY    = aarch64-none-elf-objdump
      NM_BINARY         = aarch64-none-elf-nm
      READELF_BINARY    = aarch64-none-elf-readelf
+@@ -71,17 +71,20 @@
+     --strip-all            \
+     -O binary
+
+-EXEC_QEMU = $(QEMU_BINARY) -M $(QEMU_MACHINE_TYPE)
++EXEC_QEMU          = $(QEMU_BINARY) -M $(QEMU_MACHINE_TYPE)
++EXEC_TEST_DISPATCH = ruby ../common/tests/dispatch.rb
+
+ ##------------------------------------------------------------------------------
+ ## Dockerization
+ ##------------------------------------------------------------------------------
+-DOCKER_CMD          = docker run -t --rm -v $(shell pwd):/work/tutorial -w /work/tutorial
+-DOCKER_CMD_INTERACT = $(DOCKER_CMD) -i
++DOCKER_CMD            = docker run -t --rm -v $(shell pwd):/work/tutorial -w /work/tutorial
++DOCKER_CMD_INTERACT   = $(DOCKER_CMD) -i
++DOCKER_ARG_DIR_COMMON = -v $(shell pwd)/../common:/work/common
+
+ # DOCKER_IMAGE defined in include file (see top of this file).
+ DOCKER_QEMU  = $(DOCKER_CMD_INTERACT) $(DOCKER_IMAGE)
+ DOCKER_TOOLS = $(DOCKER_CMD) $(DOCKER_IMAGE)
++DOCKER_TEST  = $(DOCKER_CMD) $(DOCKER_ARG_DIR_COMMON) $(DOCKER_IMAGE)
+
+
+
+@@ -169,3 +172,28 @@
+ ##------------------------------------------------------------------------------
+ check:
+ 	@RUSTFLAGS="$(RUSTFLAGS)" $(CHECK_CMD) --message-format=json
++
++
++
++##--------------------------------------------------------------------------------------------------
++## Testing targets
++##--------------------------------------------------------------------------------------------------
++.PHONY: test test_boot
++
++ifeq ($(QEMU_MACHINE_TYPE),) # QEMU is not supported for the board.
++
++test_boot test :
++	$(call colorecho, "\n$(QEMU_MISSING_STRING)")
++
++else # QEMU is supported.
++
++##------------------------------------------------------------------------------
++## Run boot test
++##------------------------------------------------------------------------------
++test_boot: $(KERNEL_BIN)
++	$(call colorecho, "\nBoot test - $(BSP)")
++	@$(DOCKER_TEST) $(EXEC_TEST_DISPATCH) $(EXEC_QEMU) $(QEMU_RELEASE_ARGS) -kernel $(KERNEL_BIN)
++
++test: test_boot
++
++endif
 
 diff -uNr 02_runtime_init/src/bsp/raspberrypi/console.rs 03_hacky_hello_world/src/bsp/raspberrypi/console.rs
 --- 02_runtime_init/src/bsp/raspberrypi/console.rs
@@ -78,7 +135,7 @@ diff -uNr 02_runtime_init/src/bsp/raspberrypi/console.rs 03_hacky_hello_world/sr
 @@ -0,0 +1,47 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! BSP console facilities.
 +
@@ -127,13 +184,12 @@ diff -uNr 02_runtime_init/src/bsp/raspberrypi/console.rs 03_hacky_hello_world/sr
 diff -uNr 02_runtime_init/src/bsp/raspberrypi.rs 03_hacky_hello_world/src/bsp/raspberrypi.rs
 --- 02_runtime_init/src/bsp/raspberrypi.rs
 +++ 03_hacky_hello_world/src/bsp/raspberrypi.rs
-@@ -4,5 +4,6 @@
+@@ -4,4 +4,5 @@
 
  //! Top-level BSP file for the Raspberry Pi 3 and 4.
 
 +pub mod console;
  pub mod cpu;
- pub mod memory;
 
 diff -uNr 02_runtime_init/src/console.rs 03_hacky_hello_world/src/console.rs
 --- 02_runtime_init/src/console.rs
@@ -141,7 +197,7 @@ diff -uNr 02_runtime_init/src/console.rs 03_hacky_hello_world/src/console.rs
 @@ -0,0 +1,19 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! System console.
 +
@@ -162,12 +218,11 @@ diff -uNr 02_runtime_init/src/console.rs 03_hacky_hello_world/src/console.rs
 diff -uNr 02_runtime_init/src/main.rs 03_hacky_hello_world/src/main.rs
 --- 02_runtime_init/src/main.rs
 +++ 03_hacky_hello_world/src/main.rs
-@@ -106,14 +106,18 @@
- //!
- //! [`runtime_init::runtime_init()`]: runtime_init/fn.runtime_init.html
+@@ -104,12 +104,16 @@
+ //!     - It is implemented in `src/_arch/__arch_name__/cpu/boot.s`.
+ //! 2. Once finished with architectural setup, the arch code calls `kernel_init()`.
 
 +#![feature(format_args_nl)]
- #![feature(global_asm)]
 +#![feature(panic_info_message)]
  #![no_main]
  #![no_std]
@@ -175,13 +230,12 @@ diff -uNr 02_runtime_init/src/main.rs 03_hacky_hello_world/src/main.rs
  mod bsp;
 +mod console;
  mod cpu;
- mod memory;
  mod panic_wait;
 +mod print;
- mod runtime_init;
 
  /// Early init code.
-@@ -122,5 +126,7 @@
+ ///
+@@ -117,5 +121,7 @@
  ///
  /// - Only a single core must be active and running this function.
  unsafe fn kernel_init() -> ! {
@@ -220,7 +274,7 @@ diff -uNr 02_runtime_init/src/print.rs 03_hacky_hello_world/src/print.rs
 @@ -0,0 +1,38 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Printing.
 +
@@ -256,5 +310,13 @@ diff -uNr 02_runtime_init/src/print.rs 03_hacky_hello_world/src/print.rs
 +        $crate::print::_print(format_args_nl!($($arg)*));
 +    })
 +}
+
+diff -uNr 02_runtime_init/tests/boot_test_string.rb 03_hacky_hello_world/tests/boot_test_string.rb
+--- 02_runtime_init/tests/boot_test_string.rb
++++ 03_hacky_hello_world/tests/boot_test_string.rb
+@@ -0,0 +1,3 @@
++# frozen_string_literal: true
++
++EXPECTED_PRINT = 'Stopping here'
 
 ```

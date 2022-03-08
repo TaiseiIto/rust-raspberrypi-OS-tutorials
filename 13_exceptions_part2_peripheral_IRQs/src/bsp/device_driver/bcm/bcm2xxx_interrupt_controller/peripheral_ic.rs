@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 
-//! Peripheral Interrupt regsler Driver.
+//! Peripheral Interrupt Controller Driver.
 
 use super::{InterruptController, PendingIRQs, PeripheralIRQ};
 use crate::{
@@ -10,7 +10,11 @@ use crate::{
     exception, synchronization,
     synchronization::{IRQSafeNullLock, InitStateLock},
 };
-use register::{mmio::*, register_structs};
+use tock_registers::{
+    interfaces::{Readable, Writeable},
+    register_structs,
+    registers::{ReadOnly, WriteOnly},
+};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions

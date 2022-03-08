@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! GICv2 Driver - ARM Generic Interrupt Controller v2.
 //!
@@ -133,8 +133,8 @@ impl GICv2 {
         Self {
             gicd_mmio_descriptor,
             gicc_mmio_descriptor,
-            gicd: gicd::GICD::new(gicd_mmio_descriptor.start_addr().into_usize()),
-            gicc: gicc::GICC::new(gicc_mmio_descriptor.start_addr().into_usize()),
+            gicd: gicd::GICD::new(gicd_mmio_descriptor.start_addr().as_usize()),
+            gicc: gicc::GICC::new(gicc_mmio_descriptor.start_addr().as_usize()),
             is_mmio_remapped: AtomicBool::new(false),
             handler_table: InitStateLock::new([None; Self::NUM_IRQS]),
         }
@@ -154,15 +154,13 @@ impl driver::interface::DeviceDriver for GICv2 {
     unsafe fn init(&self) -> Result<(), &'static str> {
         let remapped = self.is_mmio_remapped.load(Ordering::Relaxed);
         if !remapped {
-            let mut virt_addr;
-
             // GICD
-            virt_addr = memory::mmu::kernel_map_mmio("GICD", &self.gicd_mmio_descriptor)?;
-            self.gicd.set_mmio(virt_addr.into_usize());
+            let mut virt_addr = memory::mmu::kernel_map_mmio("GICD", &self.gicd_mmio_descriptor)?;
+            self.gicd.set_mmio(virt_addr.as_usize());
 
             // GICC
             virt_addr = memory::mmu::kernel_map_mmio("GICC", &self.gicc_mmio_descriptor)?;
-            self.gicc.set_mmio(virt_addr.into_usize());
+            self.gicc.set_mmio(virt_addr.as_usize());
 
             // Conclude remapping.
             self.is_mmio_remapped.store(true, Ordering::Relaxed);

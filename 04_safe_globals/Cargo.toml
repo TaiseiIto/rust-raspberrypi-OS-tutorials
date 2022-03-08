@@ -2,7 +2,7 @@
 name = "mingo"
 version = "0.4.0"
 authors = ["Andre Richter <andre.o.richter@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [profile.release]
 lto = true
@@ -24,4 +24,4 @@ path = "src/main.rs"
 
 # Platform specific dependencies
 [target.'cfg(target_arch = "aarch64")'.dependencies]
-cortex-a = { version = "5.x.x" }
+cortex-a = { version = "7.x.x" }

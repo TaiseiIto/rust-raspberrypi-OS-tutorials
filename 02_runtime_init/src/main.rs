@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 // Rust embedded logo for `make doc`.
 #![doc(html_logo_url = "https://git.io/JeGIp")]
@@ -102,19 +102,14 @@
 //!
 //! 1. The kernel's entry point is the function `cpu::boot::arch_boot::_start()`.
 //!     - It is implemented in `src/_arch/__arch_name__/cpu/boot.s`.
-//! 2. Once finished with architectural setup, the arch code calls [`runtime_init::runtime_init()`].
-//!
-//! [`runtime_init::runtime_init()`]: runtime_init/fn.runtime_init.html
+//! 2. Once finished with architectural setup, the arch code calls `kernel_init()`.
 
-#![feature(global_asm)]
 #![no_main]
 #![no_std]
 
 mod bsp;
 mod cpu;
-mod memory;
 mod panic_wait;
-mod runtime_init;
 
 /// Early init code.
 /// ./runtime_init.rsのruntime_initから呼び出される

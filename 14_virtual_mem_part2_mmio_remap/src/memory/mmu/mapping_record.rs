@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! A record of mapped pages.
 
@@ -8,10 +8,10 @@
 // mappingを記憶することで，既存のmappingを再利用したり，mappingの内容を表示できるようにする．
 
 use super::{
-    AccessPermissions, Address, AttributeFields, MMIODescriptor, MemAttributes,
-    PageSliceDescriptor, Physical, Virtual,
+    AccessPermissions, Address, AttributeFields, MMIODescriptor, MemAttributes, MemoryRegion,
+    Physical, Virtual,
 };
-use crate::{info, synchronization, synchronization::InitStateLock, warn};
+use crate::{bsp, info, synchronization, synchronization::InitStateLock, warn};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions
@@ -24,11 +24,9 @@ struct MappingRecordEntry {
     // 仮想memory mapping記述子
     // usersはpagesを使用しているdevice driverの名前
     pub users: [Option<&'static str>; 5],
-    // 物理page
-    pub phys_pages: PageSliceDescriptor<Physical>,
-    // 仮想address
+    pub phys_start_addr: Address<Physical>,
     pub virt_start_addr: Address<Virtual>,
-    // page属性
+    pub num_pages: usize,
     pub attribute_fields: AttributeFields,
 }
 
@@ -52,17 +50,15 @@ impl MappingRecordEntry {
     pub fn new(
         // user名?
         name: &'static str,
-        // 仮想page
-        virt_pages: &PageSliceDescriptor<Virtual>,
-        // 物理page
-        phys_pages: &PageSliceDescriptor<Physical>,
-        // page属性
+        virt_region: &MemoryRegion<Virtual>,
+        phys_region: &MemoryRegion<Physical>,
         attr: &AttributeFields,
     ) -> Self {
         Self {
             users: [Some(name), None, None, None, None],
-            phys_pages: *phys_pages,
-            virt_start_addr: virt_pages.start_addr(),
+            phys_start_addr: phys_region.start_addr(),
+            virt_start_addr: virt_region.start_addr(),
+            num_pages: phys_region.num_pages(),
             attribute_fields: *attr,
         }
     }
@@ -104,28 +100,44 @@ impl MappingRecord {
     // 自身の中から引数で与えられるphys_pagesと同じDevice MMIO領域を表すものを探す
     fn find_duplicate(
         &mut self,
-        phys_pages: &PageSliceDescriptor<Physical>,
+        phys_region: &MemoryRegion<Physical>,
     ) -> Option<&mut MappingRecordEntry> {
         self.inner
             .iter_mut()
             .filter(|x| x.is_some())
             .map(|x| x.as_mut().unwrap())
             .filter(|x| x.attribute_fields.mem_attributes == MemAttributes::Device)
-            .find(|x| x.phys_pages == *phys_pages)
+            .find(|x| {
+                if x.phys_start_addr != phys_region.start_addr() {
+                    return false;
+                }
+
+                if x.num_pages != phys_region.num_pages() {
+                    return false;
+                }
+
+                true
+            })
     }
 
     // 新しいMappingRecordEntryを追加する
     pub fn add(
         &mut self,
         name: &'static str,
-        virt_pages: &PageSliceDescriptor<Virtual>,
-        phys_pages: &PageSliceDescriptor<Physical>,
+        virt_region: &MemoryRegion<Virtual>,
+        phys_region: &MemoryRegion<Physical>,
         attr: &AttributeFields,
     ) -> Result<(), &'static str> {
         // 未使用のMappingRecordEntryを見つける
         let x = self.find_next_free()?;
+
         // そこに新しいMappingRecordEntryを追加する
-        *x = Some(MappingRecordEntry::new(name, virt_pages, phys_pages, attr));
+        *x = Some(MappingRecordEntry::new(
+            name,
+            virt_region,
+            phys_region,
+            attr,
+        ));
         Ok(())
     }
 
@@ -144,11 +156,11 @@ impl MappingRecord {
 
         // 各MappingRecordEntryを表示
         for i in self.inner.iter().flatten() {
+            let size = i.num_pages * bsp::memory::mmu::KernelGranule::SIZE;
             let virt_start = i.virt_start_addr;
-            let virt_end_inclusive = virt_start + i.phys_pages.size() - 1;
-            let phys_start = i.phys_pages.start_addr();
-            let phys_end_inclusive = i.phys_pages.end_addr_inclusive();
-            let size = i.phys_pages.size();
+            let virt_end_inclusive = virt_start + (size - 1);
+            let phys_start = i.phys_start_addr;
+            let phys_end_inclusive = phys_start + (size - 1);
 
             // 領域サイズ
             let (size, unit) = if (size >> MIB_RSHIFT) > 0 {
@@ -160,19 +172,19 @@ impl MappingRecord {
             };
 
             let attr = match i.attribute_fields.mem_attributes {
-                MemAttributes::CacheableDRAM => "C",    // Cacheable領域
-                MemAttributes::Device => "Dev",         // Device MMIO領域
+                MemAttributes::CacheableDRAM => "C", // Cacheable領域
+                MemAttributes::Device => "Dev",      // Device MMIO領域
             };
 
             let acc_p = match i.attribute_fields.acc_perms {
-                AccessPermissions::ReadOnly => "RO",    // Read Only
-                AccessPermissions::ReadWrite => "RW",   // Read Write
+                AccessPermissions::ReadOnly => "RO",  // Read Only
+                AccessPermissions::ReadWrite => "RW", // Read Write
             };
 
             let xn = if i.attribute_fields.execute_never {
-                "XN"    // 実行不可
+                "XN" // 実行不可
             } else {
-                "X"     // 実行可能
+                "X" // 実行可能
             };
 
             // MappingRecordEntryの情報を表示
@@ -215,11 +227,11 @@ use synchronization::interface::ReadWriteEx;
 /// 新しいMappingRecordEntryの追加
 pub fn kernel_add(
     name: &'static str,
-    virt_pages: &PageSliceDescriptor<Virtual>,
-    phys_pages: &PageSliceDescriptor<Physical>,
+    virt_region: &MemoryRegion<Virtual>,
+    phys_region: &MemoryRegion<Physical>,
     attr: &AttributeFields,
 ) -> Result<(), &'static str> {
-    KERNEL_MAPPING_RECORD.write(|mr| mr.add(name, virt_pages, phys_pages, attr))
+    KERNEL_MAPPING_RECORD.write(|mr| mr.add(name, virt_region, phys_region, attr))
 }
 
 pub fn kernel_find_and_insert_mmio_duplicate(
@@ -227,11 +239,11 @@ pub fn kernel_find_and_insert_mmio_duplicate(
     new_user: &'static str,
 ) -> Option<Address<Virtual>> {
     // Device MMIO領域の物理page
-    let phys_pages: PageSliceDescriptor<Physical> = (*mmio_descriptor).into();
+    let phys_region: MemoryRegion<Physical> = (*mmio_descriptor).into();
 
     KERNEL_MAPPING_RECORD.write(|mr| {
         // mmio_descriptorと同じ領域を表すMappingRecordEntryを見つける
-        let dup = mr.find_duplicate(&phys_pages)?;
+        let dup = mr.find_duplicate(&phys_region)?;
         // そこにnew_userを追加する
         if let Err(x) = dup.add_user(new_user) {
             warn!("{}", x);

@@ -91,7 +91,7 @@ diff -uNr 03_hacky_hello_world/Cargo.toml 04_safe_globals/Cargo.toml
 -version = "0.3.0"
 +version = "0.4.0"
  authors = ["Andre Richter <andre.o.richter@gmail.com>"]
- edition = "2018"
+ edition = "2021"
 
 
 diff -uNr 03_hacky_hello_world/src/bsp/raspberrypi/console.rs 04_safe_globals/src/bsp/raspberrypi/console.rs
@@ -251,23 +251,23 @@ diff -uNr 03_hacky_hello_world/src/console.rs 04_safe_globals/src/console.rs
 diff -uNr 03_hacky_hello_world/src/main.rs 04_safe_globals/src/main.rs
 --- 03_hacky_hello_world/src/main.rs
 +++ 04_safe_globals/src/main.rs
-@@ -109,6 +109,7 @@
+@@ -106,6 +106,7 @@
+
  #![feature(format_args_nl)]
- #![feature(global_asm)]
  #![feature(panic_info_message)]
 +#![feature(trait_alias)]
  #![no_main]
  #![no_std]
 
-@@ -119,6 +120,7 @@
+@@ -114,6 +115,7 @@
+ mod cpu;
  mod panic_wait;
  mod print;
- mod runtime_init;
 +mod synchronization;
 
  /// Early init code.
  ///
-@@ -126,7 +128,15 @@
+@@ -121,7 +123,15 @@
  ///
  /// - Only a single core must be active and running this function.
  unsafe fn kernel_init() -> ! {
@@ -291,7 +291,7 @@ diff -uNr 03_hacky_hello_world/src/synchronization.rs 04_safe_globals/src/synchr
 @@ -0,0 +1,77 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Synchronization primitives.
 +//!

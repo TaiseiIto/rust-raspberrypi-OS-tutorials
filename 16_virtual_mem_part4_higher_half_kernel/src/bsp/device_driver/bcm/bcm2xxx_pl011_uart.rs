@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! PL011 UART driver.
 //!
@@ -17,7 +17,11 @@ use core::{
     fmt,
     sync::atomic::{AtomicUsize, Ordering},
 };
-use register::{mmio::*, register_bitfields, register_structs};
+use tock_registers::{
+    interfaces::{Readable, Writeable},
+    register_bitfields, register_structs,
+    registers::{ReadOnly, ReadWrite, WriteOnly},
+};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions
@@ -45,12 +49,6 @@ register_bitfields! {
         /// - If the FIFO is disabled, this bit is set when the transmit holding register is full.
         /// - If the FIFO is enabled, the TXFF bit is set when the transmit FIFO is full.
         TXFF OFFSET(5) NUMBITS(1) [],
-
-        /// Receive FIFO empty. The meaning of this bit depends on the state of the FEN bit in the
-        /// LCR_H Register.
-        ///
-        /// If the FIFO is disabled, this bit is set when the receive holding register is empty. If
-        /// the FIFO is enabled, the RXFE bit is set when the receive FIFO is empty.
 
         /// Receive FIFO empty. The meaning of this bit depends on the state of the FEN bit in the
         /// LCR_H Register.
@@ -84,6 +82,7 @@ register_bitfields! {
     LCR_H [
         /// Word length. These bits indicate the number of data bits transmitted or received in a
         /// frame.
+        #[allow(clippy::enum_variant_names)]
         WLEN OFFSET(5) NUMBITS(2) [
             FiveBit = 0b00,
             SixBit = 0b01,
@@ -415,7 +414,7 @@ impl PL011Uart {
             mmio_descriptor,
             virt_mmio_start_addr: AtomicUsize::new(0),
             inner: IRQSafeNullLock::new(PL011UartInner::new(
-                mmio_descriptor.start_addr().into_usize(),
+                mmio_descriptor.start_addr().as_usize(),
             )),
             irq_number,
         }
@@ -436,10 +435,10 @@ impl driver::interface::DeviceDriver for PL011Uart {
         let virt_addr = memory::mmu::kernel_map_mmio(self.compatible(), &self.mmio_descriptor)?;
 
         self.inner
-            .lock(|inner| inner.init(Some(virt_addr.into_usize())))?;
+            .lock(|inner| inner.init(Some(virt_addr.as_usize())))?;
 
         self.virt_mmio_start_addr
-            .store(virt_addr.into_usize(), Ordering::Relaxed);
+            .store(virt_addr.as_usize(), Ordering::Relaxed);
 
         Ok(())
     }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! GPIO Driver.
 
@@ -9,7 +9,11 @@ use crate::{
     synchronization::IRQSafeNullLock,
 };
 use core::sync::atomic::{AtomicUsize, Ordering};
-use register::{mmio::*, register_bitfields, register_structs};
+use tock_registers::{
+    interfaces::{ReadWriteable, Writeable},
+    register_bitfields, register_structs,
+    registers::ReadWrite,
+};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions
@@ -211,7 +215,7 @@ impl GPIO {
         Self {
             mmio_descriptor,
             virt_mmio_start_addr: AtomicUsize::new(0),
-            inner: IRQSafeNullLock::new(GPIOInner::new(mmio_descriptor.start_addr().into_usize())),
+            inner: IRQSafeNullLock::new(GPIOInner::new(mmio_descriptor.start_addr().as_usize())),
         }
     }
 
@@ -235,10 +239,10 @@ impl driver::interface::DeviceDriver for GPIO {
         let virt_addr = memory::mmu::kernel_map_mmio(self.compatible(), &self.mmio_descriptor)?;
 
         self.inner
-            .lock(|inner| inner.init(Some(virt_addr.into_usize())))?;
+            .lock(|inner| inner.init(Some(virt_addr.as_usize())))?;
 
         self.virt_mmio_start_addr
-            .store(virt_addr.into_usize(), Ordering::Relaxed);
+            .store(virt_addr.as_usize(), Ordering::Relaxed);
 
         Ok(())
     }

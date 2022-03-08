@@ -54,7 +54,7 @@ diff -uNr 06_uart_chainloader/Cargo.toml 07_timestamps/Cargo.toml
 -version = "0.6.0"
 +version = "0.7.0"
  authors = ["Andre Richter <andre.o.richter@gmail.com>"]
- edition = "2018"
+ edition = "2021"
 
 Binary files 06_uart_chainloader/demo_payload_rpi3.img and 07_timestamps/demo_payload_rpi3.img differ
 Binary files 06_uart_chainloader/demo_payload_rpi4.img and 07_timestamps/demo_payload_rpi4.img differ
@@ -62,76 +62,103 @@ Binary files 06_uart_chainloader/demo_payload_rpi4.img and 07_timestamps/demo_pa
 diff -uNr 06_uart_chainloader/Makefile 07_timestamps/Makefile
 --- 06_uart_chainloader/Makefile
 +++ 07_timestamps/Makefile
-@@ -25,7 +25,6 @@
-     READELF_BINARY    = aarch64-none-elf-readelf
-     LINKER_FILE       = src/bsp/raspberrypi/link.ld
-     RUSTC_MISC_ARGS   = -C target-cpu=cortex-a53
+@@ -23,29 +23,27 @@
+
+ # BSP-specific arguments.
+ ifeq ($(BSP),rpi3)
+-    TARGET                 = aarch64-unknown-none-softfloat
+-    KERNEL_BIN             = kernel8.img
+-    QEMU_BINARY            = qemu-system-aarch64
+-    QEMU_MACHINE_TYPE      = raspi3
+-    QEMU_RELEASE_ARGS      = -serial stdio -display none
+-    OBJDUMP_BINARY         = aarch64-none-elf-objdump
+-    NM_BINARY              = aarch64-none-elf-nm
+-    READELF_BINARY         = aarch64-none-elf-readelf
+-    LINKER_FILE            = src/bsp/raspberrypi/link.ld
+-    RUSTC_MISC_ARGS        = -C target-cpu=cortex-a53
 -    CHAINBOOT_DEMO_PAYLOAD = demo_payload_rpi3.img
++    TARGET            = aarch64-unknown-none-softfloat
++    KERNEL_BIN        = kernel8.img
++    QEMU_BINARY       = qemu-system-aarch64
++    QEMU_MACHINE_TYPE = raspi3
++    QEMU_RELEASE_ARGS = -serial stdio -display none
++    OBJDUMP_BINARY    = aarch64-none-elf-objdump
++    NM_BINARY         = aarch64-none-elf-nm
++    READELF_BINARY    = aarch64-none-elf-readelf
++    LINKER_FILE       = src/bsp/raspberrypi/link.ld
++    RUSTC_MISC_ARGS   = -C target-cpu=cortex-a53
  else ifeq ($(BSP),rpi4)
-     TARGET            = aarch64-unknown-none-softfloat
-     KERNEL_BIN        = kernel8.img
-@@ -37,7 +36,6 @@
-     READELF_BINARY    = aarch64-none-elf-readelf
-     LINKER_FILE       = src/bsp/raspberrypi/link.ld
-     RUSTC_MISC_ARGS   = -C target-cpu=cortex-a72
+-    TARGET                 = aarch64-unknown-none-softfloat
+-    KERNEL_BIN             = kernel8.img
+-    QEMU_BINARY            = qemu-system-aarch64
+-    QEMU_MACHINE_TYPE      =
+-    QEMU_RELEASE_ARGS      = -serial stdio -display none
+-    OBJDUMP_BINARY         = aarch64-none-elf-objdump
+-    NM_BINARY              = aarch64-none-elf-nm
+-    READELF_BINARY         = aarch64-none-elf-readelf
+-    LINKER_FILE            = src/bsp/raspberrypi/link.ld
+-    RUSTC_MISC_ARGS        = -C target-cpu=cortex-a72
 -    CHAINBOOT_DEMO_PAYLOAD = demo_payload_rpi4.img
++    TARGET            = aarch64-unknown-none-softfloat
++    KERNEL_BIN        = kernel8.img
++    QEMU_BINARY       = qemu-system-aarch64
++    QEMU_MACHINE_TYPE =
++    QEMU_RELEASE_ARGS = -serial stdio -display none
++    OBJDUMP_BINARY    = aarch64-none-elf-objdump
++    NM_BINARY         = aarch64-none-elf-nm
++    READELF_BINARY    = aarch64-none-elf-readelf
++    LINKER_FILE       = src/bsp/raspberrypi/link.ld
++    RUSTC_MISC_ARGS   = -C target-cpu=cortex-a72
  endif
 
- # Export for build.rs
-@@ -70,7 +68,6 @@
- DOCKER_ARG_DEV       = --privileged -v /dev:/dev
+ QEMU_MISSING_STRING = "This board is not yet supported for QEMU."
+@@ -77,7 +75,7 @@
+     -O binary
 
- DOCKER_QEMU  = $(DOCKER_CMD_INTERACT) $(DOCKER_IMAGE)
--DOCKER_TEST  = $(DOCKER_CMD) -t $(DOCKER_ARG_DIR_UTILS) $(DOCKER_IMAGE)
- DOCKER_TOOLS = $(DOCKER_CMD) $(DOCKER_IMAGE)
+ EXEC_QEMU          = $(QEMU_BINARY) -M $(QEMU_MACHINE_TYPE)
+-EXEC_TEST_MINIPUSH = ruby tests/chainboot_test.rb
++EXEC_TEST_DISPATCH = ruby ../common/tests/dispatch.rb
+ EXEC_MINIPUSH      = ruby ../common/serial/minipush.rb
 
- # Dockerize commands that require USB device passthrough only on Linux
-@@ -80,12 +77,10 @@
-     DOCKER_CHAINBOOT = $(DOCKER_CMD_DEV) $(DOCKER_ARG_DIR_UTILS) $(DOCKER_IMAGE)
- endif
+ ##------------------------------------------------------------------------------
+@@ -134,7 +132,7 @@
+ ##------------------------------------------------------------------------------
+ ifeq ($(QEMU_MACHINE_TYPE),) # QEMU is not supported for the board.
 
--EXEC_QEMU          = $(QEMU_BINARY) -M $(QEMU_MACHINE_TYPE)
--EXEC_MINIPUSH      = ruby ../utils/minipush.rb
--EXEC_QEMU_MINIPUSH = ruby tests/qemu_minipush.rb
-+EXEC_QEMU     = $(QEMU_BINARY) -M $(QEMU_MACHINE_TYPE)
-+EXEC_MINIPUSH = ruby ../utils/minipush.rb
-
--.PHONY: all $(KERNEL_ELF) $(KERNEL_BIN) doc qemu qemuasm chainboot clippy clean readelf objdump nm \
--    check
-+.PHONY: all $(KERNEL_ELF) $(KERNEL_BIN) doc qemu chainboot clippy clean readelf objdump nm check
-
- all: $(KERNEL_BIN)
-
-@@ -101,26 +96,16 @@
- 	@$(DOC_CMD) --document-private-items --open
-
- ifeq ($(QEMU_MACHINE_TYPE),)
--qemu test:
+-qemu qemuasm:
 +qemu:
  	$(call colorecho, "\n$(QEMU_MISSING_STRING)")
- else
- qemu: $(KERNEL_BIN)
+
+ else # QEMU is supported.
+@@ -143,17 +141,13 @@
  	$(call colorecho, "\nLaunching QEMU")
  	@$(DOCKER_QEMU) $(EXEC_QEMU) $(QEMU_RELEASE_ARGS) -kernel $(KERNEL_BIN)
--
+
 -qemuasm: $(KERNEL_BIN)
 -	$(call colorecho, "\nLaunching QEMU with ASM output")
 -	@$(DOCKER_QEMU) $(EXEC_QEMU) $(QEMU_RELEASE_ARGS) -kernel $(KERNEL_BIN) -d in_asm
 -
--test: $(KERNEL_BIN)
--	$(call colorecho, "\nTesting chainloading - $(BSP)")
--	@$(DOCKER_TEST) $(EXEC_QEMU_MINIPUSH) $(EXEC_QEMU) $(QEMU_RELEASE_ARGS) \
--                -kernel $(KERNEL_BIN) $(CHAINBOOT_DEMO_PAYLOAD)
--
  endif
 
--chainboot:
+ ##------------------------------------------------------------------------------
+ ## Push the kernel to the real HW target
+ ##------------------------------------------------------------------------------
+ chainboot: $(KERNEL_BIN)
 -	@$(DOCKER_CHAINBOOT) $(EXEC_MINIPUSH) $(DEV_SERIAL) $(CHAINBOOT_DEMO_PAYLOAD)
-+chainboot: $(KERNEL_BIN)
 +	@$(DOCKER_CHAINBOOT) $(EXEC_MINIPUSH) $(DEV_SERIAL) $(KERNEL_BIN)
 
- clippy:
- 	@RUSTFLAGS="$(RUSTFLAGS_PEDANTIC)" $(CLIPPY_CMD)
+ ##------------------------------------------------------------------------------
+ ## Run clippy
+@@ -217,8 +211,7 @@
+ ##------------------------------------------------------------------------------
+ test_boot: $(KERNEL_BIN)
+ 	$(call colorecho, "\nBoot test - $(BSP)")
+-	@$(DOCKER_TEST) $(EXEC_TEST_MINIPUSH) $(EXEC_QEMU) $(QEMU_RELEASE_ARGS) \
+-		-kernel $(KERNEL_BIN) $(CHAINBOOT_DEMO_PAYLOAD)
++	@$(DOCKER_TEST) $(EXEC_TEST_DISPATCH) $(EXEC_QEMU) $(QEMU_RELEASE_ARGS) -kernel $(KERNEL_BIN)
+
+ test: test_boot
+
 
 diff -uNr 06_uart_chainloader/src/_arch/aarch64/cpu/boot.s 07_timestamps/src/_arch/aarch64/cpu/boot.s
 --- 06_uart_chainloader/src/_arch/aarch64/cpu/boot.s
@@ -154,26 +181,36 @@ diff -uNr 06_uart_chainloader/src/_arch/aarch64/cpu/boot.s 07_timestamps/src/_ar
  .equ _core_id_mask, 0b11
 
  //--------------------------------------------------------------------------------------------------
-@@ -45,31 +34,20 @@
- 	and	x1, x1, _core_id_mask
- 	ldr	x2, BOOT_CORE_ID      // provided by bsp/__board_name__/cpu.rs
- 	cmp	x1, x2
--	b.ne	2f
--
--	// If execution reaches here, it is the boot core.
-+	b.ne	1f
+@@ -50,35 +39,23 @@
+ 	// If execution reaches here, it is the boot core.
+
+ 	// Initialize DRAM.
+-	ADR_ABS	x0, __bss_start
+-	ADR_ABS x1, __bss_end_exclusive
++	ADR_REL	x0, __bss_start
++	ADR_REL x1, __bss_end_exclusive
+
+ .L_bss_init_loop:
+ 	cmp	x0, x1
+-	b.eq	.L_relocate_binary
++	b.eq	.L_prepare_rust
+ 	stp	xzr, xzr, [x0], #16
+ 	b	.L_bss_init_loop
 
 -	// Next, relocate the binary.
+-.L_relocate_binary:
 -	ADR_REL	x0, __binary_nonzero_start         // The address the binary got loaded to.
 -	ADR_ABS	x1, __binary_nonzero_start         // The address the binary was linked to.
 -	ADR_ABS	x2, __binary_nonzero_end_exclusive
 -
--1:	ldr	x3, [x0], #8
+-.L_copy_loop:
+-	ldr	x3, [x0], #8
 -	str	x3, [x1], #8
 -	cmp	x1, x2
--	b.lo	1b
-+	// If execution reaches here, it is the boot core. Now, prepare the jump to Rust code.
-
+-	b.lo	.L_copy_loop
+-
+ 	// Prepare the jump to Rust code.
++.L_prepare_rust:
  	// Set the stack pointer.
 -	ADR_ABS	x0, __boot_core_stack_end_exclusive
 +	ADR_REL	x0, __boot_core_stack_end_exclusive
@@ -186,13 +223,7 @@ diff -uNr 06_uart_chainloader/src/_arch/aarch64/cpu/boot.s 07_timestamps/src/_ar
 +	b	_start_rust
 
  	// Infinitely wait for events (aka "park the core").
--2:	wfe
--	b	2b
-+1:	wfe
-+	b	1b
-
- .size	_start, . - _start
- .type	_start, function
+ .L_parking_loop:
 
 diff -uNr 06_uart_chainloader/src/_arch/aarch64/cpu.rs 07_timestamps/src/_arch/aarch64/cpu.rs
 --- 06_uart_chainloader/src/_arch/aarch64/cpu.rs
@@ -217,10 +248,10 @@ diff -uNr 06_uart_chainloader/src/_arch/aarch64/cpu.rs 07_timestamps/src/_arch/a
 diff -uNr 06_uart_chainloader/src/_arch/aarch64/time.rs 07_timestamps/src/_arch/aarch64/time.rs
 --- 06_uart_chainloader/src/_arch/aarch64/time.rs
 +++ 07_timestamps/src/_arch/aarch64/time.rs
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,119 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Architectural timer primitives.
 +//!
@@ -233,7 +264,8 @@ diff -uNr 06_uart_chainloader/src/_arch/aarch64/time.rs 07_timestamps/src/_arch/
 +
 +use crate::{time, warn};
 +use core::time::Duration;
-+use cortex_a::{barrier, regs::*};
++use cortex_a::{asm::barrier, registers::*};
++use tock_registers::interfaces::{ReadWriteable, Readable, Writeable};
 +
 +//--------------------------------------------------------------------------------------------------
 +// Private Definitions
@@ -340,7 +372,7 @@ diff -uNr 06_uart_chainloader/src/_arch/aarch64/time.rs 07_timestamps/src/_arch/
 diff -uNr 06_uart_chainloader/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs 07_timestamps/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs
 --- 06_uart_chainloader/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs
 +++ 07_timestamps/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs
-@@ -139,25 +139,19 @@
+@@ -143,25 +143,19 @@
      /// Disable pull-up/down on pins 14 and 15.
      #[cfg(feature = "bsp_rpi3")]
      fn disable_pud_14_15_bcm2837(&mut self) {
@@ -376,7 +408,7 @@ diff -uNr 06_uart_chainloader/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs 07_times
 diff -uNr 06_uart_chainloader/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 07_timestamps/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs
 --- 06_uart_chainloader/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs
 +++ 07_timestamps/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs
-@@ -279,7 +279,7 @@
+@@ -278,7 +278,7 @@
      }
 
      /// Retrieve a character.
@@ -385,7 +417,7 @@ diff -uNr 06_uart_chainloader/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 07
          // If RX FIFO is empty,
          if self.registers.FR.matches_all(FR::RXFE::SET) {
              // immediately return in non-blocking mode.
-@@ -294,7 +294,12 @@
+@@ -293,7 +293,12 @@
          }
 
          // Read one character.
@@ -399,7 +431,7 @@ diff -uNr 06_uart_chainloader/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 07
 
          // Update statistics.
          self.chars_read += 1;
-@@ -374,14 +379,14 @@
+@@ -373,14 +378,14 @@
  impl console::interface::Read for PL011Uart {
      fn read_char(&self) -> char {
          self.inner
@@ -420,17 +452,26 @@ diff -uNr 06_uart_chainloader/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 07
 diff -uNr 06_uart_chainloader/src/bsp/raspberrypi/link.ld 07_timestamps/src/bsp/raspberrypi/link.ld
 --- 06_uart_chainloader/src/bsp/raspberrypi/link.ld
 +++ 07_timestamps/src/bsp/raspberrypi/link.ld
-@@ -16,8 +16,7 @@
+@@ -3,6 +3,8 @@
+  * Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
+  */
+
++__rpi_phys_dram_start_addr = 0;
++
+ /* The physical address at which the the kernel binary will be loaded by the Raspberry's firmware */
+ __rpi_phys_binary_load_addr = 0x80000;
+
+@@ -26,8 +28,7 @@
 
  SECTIONS
  {
 -    /* Set the link address to 32 MiB */
 -    . = 0x2000000;
-+    . =  __rpi_load_addr;
-                                         /*   ^             */
-                                         /*   | stack       */
-                                         /*   | growth      */
-@@ -27,7 +26,6 @@
++    . =  __rpi_phys_dram_start_addr;
+
+     /***********************************************************************************************
+     * Boot Core Stack
+@@ -44,7 +45,6 @@
      /***********************************************************************************************
      * Code + RO Data + Global Offset Table
      ***********************************************************************************************/
@@ -438,25 +479,22 @@ diff -uNr 06_uart_chainloader/src/bsp/raspberrypi/link.ld 07_timestamps/src/bsp/
      .text :
      {
          KEEP(*(.text._start))
-@@ -44,12 +42,8 @@
+@@ -61,10 +61,6 @@
      ***********************************************************************************************/
-     .data : { *(.data*) } :segment_rw
+     .data : { *(.data*) } :segment_data
 
 -    /* Fill up to 8 byte, b/c relocating the binary is done in u64 chunks */
 -    . = ALIGN(8);
 -    __binary_nonzero_end_exclusive = .;
 -
-     /* Section is zeroed in u64 chunks, align start and end to 8 bytes */
--    .bss :
-+    .bss : ALIGN(8)
+     /* Section is zeroed in pairs of u64. Align start and end to 16 bytes */
+     .bss (NOLOAD) : ALIGN(16)
      {
-         __bss_start = .;
-         *(.bss*);
 
 diff -uNr 06_uart_chainloader/src/bsp/raspberrypi/memory.rs 07_timestamps/src/bsp/raspberrypi/memory.rs
 --- 06_uart_chainloader/src/bsp/raspberrypi/memory.rs
 +++ 07_timestamps/src/bsp/raspberrypi/memory.rs
-@@ -23,10 +23,9 @@
+@@ -11,10 +11,9 @@
  /// The board's physical memory map.
  #[rustfmt::skip]
  pub(super) mod map {
@@ -469,21 +507,20 @@ diff -uNr 06_uart_chainloader/src/bsp/raspberrypi/memory.rs 07_timestamps/src/bs
 
      /// Physical devices.
      #[cfg(feature = "bsp_rpi3")]
-@@ -53,13 +52,7 @@
- // Public Code
- //--------------------------------------------------------------------------------------------------
-
+@@ -36,13 +35,3 @@
+         pub const PL011_UART_START: usize = START + UART_OFFSET;
+     }
+ }
+-
+-//--------------------------------------------------------------------------------------------------
+-// Public Code
+-//--------------------------------------------------------------------------------------------------
+-
 -/// The address on which the Raspberry firmware loads every binary by default.
 -#[inline(always)]
 -pub fn board_default_load_addr() -> *const u64 {
 -    map::BOARD_DEFAULT_LOAD_ADDRESS as _
 -}
--
--/// Return the inclusive range spanning the relocated .bss section.
-+/// Return the inclusive range spanning the .bss section.
- ///
- /// # Safety
- ///
 
 diff -uNr 06_uart_chainloader/src/cpu.rs 07_timestamps/src/cpu.rs
 --- 06_uart_chainloader/src/cpu.rs
@@ -499,23 +536,15 @@ diff -uNr 06_uart_chainloader/src/cpu.rs 07_timestamps/src/cpu.rs
 diff -uNr 06_uart_chainloader/src/main.rs 07_timestamps/src/main.rs
 --- 06_uart_chainloader/src/main.rs
 +++ 07_timestamps/src/main.rs
-@@ -107,7 +107,6 @@
- //! [`runtime_init::runtime_init()`]: runtime_init/fn.runtime_init.html
-
- #![allow(clippy::upper_case_acronyms)]
--#![feature(asm)]
- #![feature(const_fn_fn_ptr_basics)]
- #![feature(format_args_nl)]
- #![feature(global_asm)]
-@@ -125,6 +124,7 @@
+@@ -119,6 +119,7 @@
+ mod panic_wait;
  mod print;
- mod runtime_init;
  mod synchronization;
 +mod time;
 
  /// Early init code.
  ///
-@@ -147,56 +147,38 @@
+@@ -141,56 +142,38 @@
      kernel_main()
  }
 
@@ -683,7 +712,7 @@ diff -uNr 06_uart_chainloader/src/time.rs 07_timestamps/src/time.rs
 @@ -0,0 +1,37 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Timer primitives.
 +
@@ -719,90 +748,98 @@ diff -uNr 06_uart_chainloader/src/time.rs 07_timestamps/src/time.rs
 +    }
 +}
 
-diff -uNr 06_uart_chainloader/tests/qemu_minipush.rb 07_timestamps/tests/qemu_minipush.rb
---- 06_uart_chainloader/tests/qemu_minipush.rb
-+++ 07_timestamps/tests/qemu_minipush.rb
+diff -uNr 06_uart_chainloader/tests/boot_test_string.rb 07_timestamps/tests/boot_test_string.rb
+--- 06_uart_chainloader/tests/boot_test_string.rb
++++ 07_timestamps/tests/boot_test_string.rb
+@@ -0,0 +1,3 @@
++# frozen_string_literal: true
++
++EXPECTED_PRINT = 'Spinning for 1 second'
+
+diff -uNr 06_uart_chainloader/tests/chainboot_test.rb 07_timestamps/tests/chainboot_test.rb
+--- 06_uart_chainloader/tests/chainboot_test.rb
++++ 07_timestamps/tests/chainboot_test.rb
 @@ -1,80 +0,0 @@
 -# frozen_string_literal: true
 -
 -# SPDX-License-Identifier: MIT OR Apache-2.0
 -#
--# Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
+-# Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 -
--require_relative '../../utils/minipush'
--require 'expect'
--require 'timeout'
+-require_relative '../../common/serial/minipush'
+-require_relative '../../common/tests/boot_test'
+-require 'pty'
 -
 -# Match for the last print that 'demo_payload_rpiX.img' produces.
 -EXPECTED_PRINT = 'Echoing input now'
 -
--# The main class
--class QEMUMiniPush < MiniPush
--    TIMEOUT_SECS = 3
+-# Extend BootTest so that it listens on the output of a MiniPush instance, which is itself connected
+-# to a QEMU instance instead of a real HW.
+-class ChainbootTest < BootTest
+-    MINIPUSH = '../common/serial/minipush.rb'
+-    MINIPUSH_POWER_TARGET_REQUEST = 'Please power the target now'
 -
--    # override
--    def initialize(qemu_cmd, binary_image_path)
--        super(nil, binary_image_path)
+-    def initialize(qemu_cmd, payload_path)
+-        super(qemu_cmd, EXPECTED_PRINT)
 -
--        @qemu_cmd = qemu_cmd
+-        @test_name = 'Boot test using Minipush'
+-
+-        @payload_path = payload_path
 -    end
 -
 -    private
 -
--    def quit_qemu_graceful
--        Timeout.timeout(5) do
--            pid = @target_serial.pid
--            Process.kill('TERM', pid)
--            Process.wait(pid)
+-    # override
+-    def post_process_and_add_output(output)
+-        temp = output.join.split("\r\n")
+-
+-        # Should a line have solo carriage returns, remove any overridden parts of the string.
+-        temp.map! { |x| x.gsub(/.*\r/, '') }
+-
+-        @test_output += temp
+-    end
+-
+-    def wait_for_minipush_power_request(mp_out)
+-        output = []
+-        Timeout.timeout(MAX_WAIT_SECS) do
+-            loop do
+-                output << mp_out.gets
+-                break if output.last.include?(MINIPUSH_POWER_TARGET_REQUEST)
+-            end
 -        end
+-    rescue Timeout::Error
+-        @test_error = 'Timed out waiting for power request'
+-    rescue StandardError => e
+-        @test_error = e.message
+-    ensure
+-        post_process_and_add_output(output)
 -    end
 -
 -    # override
--    def open_serial
--        @target_serial = IO.popen(@qemu_cmd, 'r+', err: '/dev/null')
+-    def setup
+-        pty_main, pty_secondary = PTY.open
+-        mp_out, _mp_in = PTY.spawn("ruby #{MINIPUSH} #{pty_secondary.path} #{@payload_path}")
 -
--        # Ensure all output is immediately flushed to the device.
--        @target_serial.sync = true
+-        # Wait until MiniPush asks for powering the target.
+-        wait_for_minipush_power_request(mp_out)
 -
--        puts "[#{@name_short}] ✅ Serial connected"
--    end
+-        # Now is the time to start QEMU with the chainloader binary. QEMU's virtual tty is connected
+-        # to the MiniPush instance spawned above, so that the two processes talk to each other.
+-        Process.spawn(@qemu_cmd, in: pty_main, out: pty_main)
 -
--    # override
--    def terminal
--        result = @target_serial.expect(EXPECTED_PRINT, TIMEOUT_SECS)
--        exit(1) if result.nil?
--
--        puts result
--
--        quit_qemu_graceful
--    end
--
--    # override
--    def connetion_reset; end
--
--    # override
--    def handle_reconnect(error)
--        handle_unexpected(error)
+-        # The remainder of the test is done by the parent class' run_concrete_test, which listens on
+-        # @qemu_serial. Hence, point it to MiniPush's output.
+-        @qemu_serial = mp_out
 -    end
 -end
 -
 -##--------------------------------------------------------------------------------------------------
 -## Execution starts here
 -##--------------------------------------------------------------------------------------------------
--puts
--puts 'QEMUMiniPush 1.0'.cyan
--puts
--
--# CTRL + C handler. Only here to suppress Ruby's default exception print.
--trap('INT') do
--    # The `ensure` block from `QEMUMiniPush::run` will run after exit, restoring console state.
--    exit
--end
--
--binary_image_path = ARGV.pop
+-payload_path = ARGV.pop
 -qemu_cmd = ARGV.join(' ')
 -
--QEMUMiniPush.new(qemu_cmd, binary_image_path).run
+-ChainbootTest.new(qemu_cmd, payload_path).run
 
 diff -uNr 06_uart_chainloader/update.sh 07_timestamps/update.sh
 --- 06_uart_chainloader/update.sh

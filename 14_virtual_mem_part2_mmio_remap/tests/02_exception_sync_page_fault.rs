@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2019-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2019-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Page faults must result in synchronous exceptions.
 
@@ -10,7 +10,7 @@
 
 /// Overwrites libkernel's `panic_wait::_panic_exit()` so that it returns a "success" code.
 ///
-/// In this test, teaching the panic is a success, because it is called from the synchronous
+/// In this test, reaching the panic is a success, because it is called from the synchronous
 /// exception handler, which is what this test wants to achieve.
 ///
 /// It also means that this integration test can not use any other code that calls panic!() directly
@@ -24,10 +24,9 @@ unsafe fn kernel_init() -> ! {
     use libkernel::driver::interface::DriverManager;
 
     exception::handling_init();
-    bsp::console::qemu_bring_up_console();
 
+    // This line will be printed as the test header.
     println!("Testing synchronous exception handling by causing a page fault");
-    println!("-------------------------------------------------------------------\n");
 
     // kernel translation tableのaddressが取得できることを確認
     let phys_kernel_tables_base_addr = match memory::mmu::kernel_map_binary() {
@@ -45,6 +44,9 @@ unsafe fn kernel_init() -> ! {
     }
     // Printing will silently fail from here on, because the driver's MMIO is not remapped yet.
     // MMIOがremapされていないので，ここから出力できなくなる
+
+    memory::mmu::post_enable_init();
+    bsp::console::qemu_bring_up_console();
 
     // Bring up the drivers needed for printing first.
     // 各driverに対して，

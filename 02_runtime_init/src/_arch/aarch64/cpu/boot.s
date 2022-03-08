@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2021-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //--------------------------------------------------------------------------------------------------
 // Definitions
@@ -38,12 +38,25 @@ _start:
 							  // MPIDR_EL1についてはhttps://developer.arm.com/documentation/ddi0500/j/System-Control/AArch64-register-descriptions/Multiprocessor-Affinity-Register
 	and	x1, x1, _core_id_mask
 	ldr	x2, BOOT_CORE_ID      // provided by bsp/__board_name__/cpu.rs
-	cmp	x1, x2				  // x1(自分自身のcore id)とx2(boot core id)を比較
-	b.ne	1f				  // boot core以外は1に飛んで停止する
-
 	// If execution reaches here, it is the boot core. Now, prepare the jump to Rust code.
 	// 以下boot coreのみが実行する処理．stack pointerを設定してRust codeに飛ぶ．
+	cmp	x1, x2
+	b.ne	.L_parking_loop
 
+	// If execution reaches here, it is the boot core.
+
+	// Initialize DRAM.
+	ADR_REL	x0, __bss_start
+	ADR_REL x1, __bss_end_exclusive
+
+.L_bss_init_loop:
+	cmp	x0, x1
+	b.eq	.L_prepare_rust
+	stp	xzr, xzr, [x0], #16
+	b	.L_bss_init_loop
+
+	// Prepare the jump to Rust code.
+.L_prepare_rust:
 	// Set the stack pointer.
 	ADR_REL	x0, __boot_core_stack_end_exclusive	//../../bsp/raspberrypi/link.ldで，stackはentry pointから番地の若い方向に伸びると書かれている
 	mov	sp, x0
@@ -54,8 +67,9 @@ _start:
 
 	// Infinitely wait for events (aka "park the core").
 	// boot core以外はここに飛んで停止する．
-1:	wfe
-	b	1b
+.L_parking_loop:
+	wfe
+	b	.L_parking_loop
 
 .size	_start, . - _start
 .type	_start, function

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2021-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Architectural translation table.
 //!
@@ -21,7 +21,11 @@ use crate::{
     },
 };
 use core::convert;
-use register::{register_bitfields, InMemoryRegister};
+use tock_registers::{
+    interfaces::{Readable, Writeable},
+    register_bitfields,
+    registers::InMemoryRegister,
+};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions
@@ -184,7 +188,7 @@ impl TableDescriptor {
 
 /// Convert the kernel's generic memory attributes to HW-specific attributes of the MMU.
 impl convert::From<AttributeFields>
-    for register::FieldValue<u64, STAGE1_PAGE_DESCRIPTOR::Register>
+    for tock_registers::fields::FieldValue<u64, STAGE1_PAGE_DESCRIPTOR::Register>
 {
     fn from(attribute_fields: AttributeFields) -> Self {
         // Memory attributes.

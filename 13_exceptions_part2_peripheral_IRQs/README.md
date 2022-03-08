@@ -755,16 +755,29 @@ diff -uNr 12_integrated_testing/Cargo.toml 13_exceptions_part2_peripheral_IRQs/C
 -version = "0.12.0"
 +version = "0.13.0"
  authors = ["Andre Richter <andre.o.richter@gmail.com>"]
- edition = "2018"
+ edition = "2021"
 
+
+diff -uNr 12_integrated_testing/Makefile 13_exceptions_part2_peripheral_IRQs/Makefile
+--- 12_integrated_testing/Makefile
++++ 13_exceptions_part2_peripheral_IRQs/Makefile
+@@ -292,7 +292,7 @@
+ test_unit:
+ 	$(call colorecho, "\nCompiling unit test(s) - $(BSP)")
+ 	$(call test_prepare)
+-	RUSTFLAGS="$(RUSTFLAGS_PEDANTIC)" $(TEST_CMD) --lib
++	@RUSTFLAGS="$(RUSTFLAGS_PEDANTIC)" $(TEST_CMD) --lib
+
+ ##------------------------------------------------------------------------------
+ ## Run integration test(s)
 
 diff -uNr 12_integrated_testing/src/_arch/aarch64/cpu/smp.rs 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/cpu/smp.rs
 --- 12_integrated_testing/src/_arch/aarch64/cpu/smp.rs
 +++ 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/cpu/smp.rs
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,30 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Architectural symmetric multiprocessing.
 +//!
@@ -775,7 +788,8 @@ diff -uNr 12_integrated_testing/src/_arch/aarch64/cpu/smp.rs 13_exceptions_part2
 +//!
 +//! crate::cpu::smp::arch_smp
 +
-+use cortex_a::regs::*;
++use cortex_a::registers::*;
++use tock_registers::interfaces::Readable;
 +
 +//--------------------------------------------------------------------------------------------------
 +// Public Code
@@ -795,7 +809,16 @@ diff -uNr 12_integrated_testing/src/_arch/aarch64/cpu/smp.rs 13_exceptions_part2
 diff -uNr 12_integrated_testing/src/_arch/aarch64/exception/asynchronous.rs 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/exception/asynchronous.rs
 --- 12_integrated_testing/src/_arch/aarch64/exception/asynchronous.rs
 +++ 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/exception/asynchronous.rs
-@@ -17,6 +17,10 @@
+@@ -11,13 +11,18 @@
+ //!
+ //! crate::exception::asynchronous::arch_asynchronous
+
++use core::arch::asm;
+ use cortex_a::registers::*;
+-use tock_registers::interfaces::Readable;
++use tock_registers::interfaces::{Readable, Writeable};
+
+ //--------------------------------------------------------------------------------------------------
  // Private Definitions
  //--------------------------------------------------------------------------------------------------
 
@@ -804,9 +827,9 @@ diff -uNr 12_integrated_testing/src/_arch/aarch64/exception/asynchronous.rs 13_e
 +}
 +
  trait DaifField {
-     fn daif_field() -> register::Field<u64, DAIF::Register>;
+     fn daif_field() -> tock_registers::fields::Field<u64, DAIF::Register>;
  }
-@@ -65,6 +69,71 @@
+@@ -66,6 +71,71 @@
  // Public Code
  //--------------------------------------------------------------------------------------------------
 
@@ -887,9 +910,9 @@ diff -uNr 12_integrated_testing/src/_arch/aarch64/exception.rs 13_exceptions_par
  //! crate::exception::arch_exception
 
 +use crate::{bsp, exception};
- use core::{cell::UnsafeCell, fmt};
- use cortex_a::{barrier, regs::*};
- use register::InMemoryRegister;
+ use core::{arch::global_asm, cell::UnsafeCell, fmt};
+ use cortex_a::{asm::barrier, registers::*};
+ use tock_registers::{
 @@ -91,8 +92,11 @@
  }
 
@@ -908,15 +931,19 @@ diff -uNr 12_integrated_testing/src/_arch/aarch64/exception.rs 13_exceptions_par
 diff -uNr 12_integrated_testing/src/bsp/device_driver/arm/gicv2/gicc.rs 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gicc.rs
 --- 12_integrated_testing/src/bsp/device_driver/arm/gicv2/gicc.rs
 +++ 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gicc.rs
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,141 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! GICC Driver - GIC CPU interface.
 +
 +use crate::{bsp::device_driver::common::MMIODerefWrapper, exception};
-+use register::{mmio::*, register_bitfields, register_structs};
++use tock_registers::{
++    interfaces::{Readable, Writeable},
++    register_bitfields, register_structs,
++    registers::ReadWrite,
++};
 +
 +//--------------------------------------------------------------------------------------------------
 +// Private Definitions
@@ -1050,10 +1077,10 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/arm/gicv2/gicc.rs 13_excep
 diff -uNr 12_integrated_testing/src/bsp/device_driver/arm/gicv2/gicd.rs 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gicd.rs
 --- 12_integrated_testing/src/bsp/device_driver/arm/gicv2/gicd.rs
 +++ 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gicd.rs
-@@ -0,0 +1,195 @@
+@@ -0,0 +1,199 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! GICD Driver - GIC Distributor.
 +//!
@@ -1064,7 +1091,11 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/arm/gicv2/gicd.rs 13_excep
 +    bsp::device_driver::common::MMIODerefWrapper, state, synchronization,
 +    synchronization::IRQSafeNullLock,
 +};
-+use register::{mmio::*, register_bitfields, register_structs};
++use tock_registers::{
++    interfaces::{Readable, Writeable},
++    register_bitfields, register_structs,
++    registers::{ReadOnly, ReadWrite},
++};
 +
 +//--------------------------------------------------------------------------------------------------
 +// Private Definitions
@@ -1253,7 +1284,7 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/arm/gicv2.rs 13_exceptions
 @@ -0,0 +1,219 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! GICv2 Driver - ARM Generic Interrupt Controller v2.
 +//!
@@ -1477,7 +1508,7 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/arm.rs 13_exceptions_part2
 @@ -0,0 +1,9 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! ARM driver top level.
 +
@@ -1495,9 +1526,9 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs 13_exc
 -    synchronization::NullLock,
 +    synchronization::IRQSafeNullLock,
  };
- use register::{mmio::*, register_bitfields, register_structs};
-
-@@ -117,7 +117,7 @@
+ use tock_registers::{
+     interfaces::{ReadWriteable, Writeable},
+@@ -121,7 +121,7 @@
 
  /// Representation of the GPIO HW.
  pub struct GPIO {
@@ -1506,7 +1537,7 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs 13_exc
  }
 
  //--------------------------------------------------------------------------------------------------
-@@ -193,7 +193,7 @@
+@@ -197,7 +197,7 @@
      /// - The user must ensure to provide a correct MMIO start address.
      pub const unsafe fn new(mmio_start_addr: usize) -> Self {
          Self {
@@ -1519,12 +1550,12 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs 13_exc
 diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_interrupt_controller/peripheral_ic.rs 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_interrupt_controller/peripheral_ic.rs
 --- 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_interrupt_controller/peripheral_ic.rs
 +++ 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_interrupt_controller/peripheral_ic.rs
-@@ -0,0 +1,163 @@
+@@ -0,0 +1,167 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
-+//! Peripheral Interrupt regsler Driver.
++//! Peripheral Interrupt Controller Driver.
 +
 +use super::{InterruptController, PendingIRQs, PeripheralIRQ};
 +use crate::{
@@ -1532,7 +1563,11 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_interrupt_cont
 +    exception, synchronization,
 +    synchronization::{IRQSafeNullLock, InitStateLock},
 +};
-+use register::{mmio::*, register_structs};
++use tock_registers::{
++    interfaces::{Readable, Writeable},
++    register_structs,
++    registers::{ReadOnly, WriteOnly},
++};
 +
 +//--------------------------------------------------------------------------------------------------
 +// Private Definitions
@@ -1690,7 +1725,7 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_interrupt_cont
 @@ -0,0 +1,131 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Interrupt Controller Driver.
 +
@@ -1833,8 +1868,8 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 
 +    synchronization, synchronization::IRQSafeNullLock,
  };
  use core::fmt;
- use register::{mmio::*, register_bitfields, register_structs};
-@@ -135,6 +135,52 @@
+ use tock_registers::{
+@@ -134,6 +134,52 @@
          ]
      ],
 
@@ -1887,7 +1922,7 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 
      /// Interrupt Clear Register.
      ICR [
          /// Meta field for all pending interrupts.
-@@ -153,7 +199,10 @@
+@@ -152,7 +198,10 @@
          (0x28 => FBRD: WriteOnly<u32, FBRD::Register>),
          (0x2c => LCR_H: WriteOnly<u32, LCR_H::Register>),
          (0x30 => CR: WriteOnly<u32, CR::Register>),
@@ -1899,7 +1934,7 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 
          (0x44 => ICR: WriteOnly<u32, ICR::Register>),
          (0x48 => @END),
      }
-@@ -183,7 +232,8 @@
+@@ -182,7 +231,8 @@
 
  /// Representation of the UART.
  pub struct PL011Uart {
@@ -1909,7 +1944,7 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 
  }
 
  //--------------------------------------------------------------------------------------------------
-@@ -251,6 +301,14 @@
+@@ -250,6 +300,14 @@
              .LCR_H
              .write(LCR_H::WLEN::EightBit + LCR_H::FEN::FifosEnabled);
 
@@ -1924,7 +1959,7 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 
          // Turn the UART on.
          self.registers
              .CR
-@@ -333,9 +391,13 @@
+@@ -332,9 +390,13 @@
      /// # Safety
      ///
      /// - The user must ensure to provide a correct MMIO start address.
@@ -1940,7 +1975,7 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 
          }
      }
  }
-@@ -355,6 +417,21 @@
+@@ -354,6 +416,21 @@
 
          Ok(())
      }
@@ -1962,7 +1997,7 @@ diff -uNr 12_integrated_testing/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 
  }
 
  impl console::interface::Write for PL011Uart {
-@@ -401,3 +478,24 @@
+@@ -400,3 +477,24 @@
          self.inner.lock(|inner| inner.chars_read)
      }
  }
@@ -2054,7 +2089,7 @@ diff -uNr 12_integrated_testing/src/bsp/raspberrypi/exception/asynchronous.rs 13
 @@ -0,0 +1,36 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! BSP asynchronous exception handling.
 +
@@ -2095,7 +2130,7 @@ diff -uNr 12_integrated_testing/src/bsp/raspberrypi/exception.rs 13_exceptions_p
 @@ -0,0 +1,7 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! BSP synchronous and asynchronous exception handling.
 +
@@ -2104,7 +2139,7 @@ diff -uNr 12_integrated_testing/src/bsp/raspberrypi/exception.rs 13_exceptions_p
 diff -uNr 12_integrated_testing/src/bsp/raspberrypi/memory.rs 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory.rs
 --- 12_integrated_testing/src/bsp/raspberrypi/memory.rs
 +++ 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory.rs
-@@ -51,10 +51,12 @@
+@@ -73,10 +73,12 @@
      pub mod mmio {
          use super::*;
 
@@ -2121,7 +2156,7 @@ diff -uNr 12_integrated_testing/src/bsp/raspberrypi/memory.rs 13_exceptions_part
      }
 
      /// Physical devices.
-@@ -65,6 +67,8 @@
+@@ -87,6 +89,8 @@
          pub const START:            usize =         0xFE00_0000;
          pub const GPIO_START:       usize = START + GPIO_OFFSET;
          pub const PL011_UART_START: usize = START + UART_OFFSET;
@@ -2177,7 +2212,7 @@ diff -uNr 12_integrated_testing/src/cpu/smp.rs 13_exceptions_part2_peripheral_IR
 @@ -0,0 +1,14 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Symmetric multiprocessing.
 +
@@ -2376,15 +2411,17 @@ diff -uNr 12_integrated_testing/src/exception/asynchronous.rs 13_exceptions_part
 diff -uNr 12_integrated_testing/src/lib.rs 13_exceptions_part2_peripheral_IRQs/src/lib.rs
 --- 12_integrated_testing/src/lib.rs
 +++ 13_exceptions_part2_peripheral_IRQs/src/lib.rs
-@@ -110,6 +110,7 @@
+@@ -108,7 +108,9 @@
 
  #![allow(clippy::upper_case_acronyms)]
  #![allow(incomplete_features)]
-+#![feature(asm)]
++#![feature(asm_const)]
  #![feature(const_fn_fn_ptr_basics)]
- #![feature(const_generics)]
- #![feature(const_panic)]
-@@ -137,6 +138,7 @@
++#![feature(const_fn_trait_bound)]
+ #![feature(core_intrinsics)]
+ #![feature(format_args_nl)]
+ #![feature(linkage)]
+@@ -131,6 +133,7 @@
  pub mod exception;
  pub mod memory;
  pub mod print;
@@ -2490,7 +2527,7 @@ diff -uNr 12_integrated_testing/src/state.rs 13_exceptions_part2_peripheral_IRQs
 @@ -0,0 +1,92 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! State information about the kernel itself.
 +
@@ -2722,7 +2759,7 @@ diff -uNr 12_integrated_testing/tests/03_exception_irq_sanity.rs 13_exceptions_p
 @@ -0,0 +1,66 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! IRQ handling sanity tests.
 +

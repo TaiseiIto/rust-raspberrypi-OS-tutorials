@@ -62,7 +62,7 @@ Afterwards, we continue with preparing the `EL2` -> `EL1` transition by calling
 pub unsafe extern "C" fn _start_rust(phys_boot_core_stack_end_exclusive_addr: u64) -> ! {
     prepare_el2_to_el1_transition(phys_boot_core_stack_end_exclusive_addr);
 
-    // Use `eret` to "return" to EL1. This results in execution of runtime_init() in EL1.
+    // Use `eret` to "return" to EL1. This results in execution of kernel_init() in EL1.
     asm::eret()
 }
 ```
@@ -125,19 +125,16 @@ SPSR_EL2.write(
         + SPSR_EL2::M::EL1h,
 );
 
-// Second, let the link register point to runtime_init().
-ELR_EL2.set(runtime_init::runtime_init as *const () as u64);
+// Second, let the link register point to kernel_init().
+ELR_EL2.set(crate::kernel_init as *const () as u64);
 
 // Set up SP_EL1 (stack pointer), which will be used by EL1 once we "return" to it. Since there
 // are no plans to ever return to EL2, just re-use the same stack.
 SP_EL1.set(phys_boot_core_stack_end_exclusive_addr);
 ```
 
-As you can see, we are populating `ELR_EL2` with the address of the [runtime_init()] function that
-we earlier used to call directly from the entrypoint. Finally, we set the stack pointer for
-`SP_EL1`.
-
-[runtime_init()]: src/runtime_init.rs
+As you can see, we are populating `ELR_EL2` with the address of the `kernel_init()` function that we
+earlier used to call directly from the entrypoint. Finally, we set the stack pointer for `SP_EL1`.
 
 You might have noticed that the stack's address was supplied as a function argument. As you might
 remember, in  `_start()` in `boot.s`, we are already setting up the stack for `EL2`. Since there
@@ -151,7 +148,7 @@ Lastly, back in `_start_rust()` a call to `ERET` is made:
 pub unsafe extern "C" fn _start_rust(phys_boot_core_stack_end_exclusive_addr: u64) -> ! {
     prepare_el2_to_el1_transition(phys_boot_core_stack_end_exclusive_addr);
 
-    // Use `eret` to "return" to EL1. This results in execution of runtime_init() in EL1.
+    // Use `eret` to "return" to EL1. This results in execution of kernel_init() in EL1.
     asm::eret()
 }
 ```
@@ -208,22 +205,25 @@ diff -uNr 08_hw_debug_JTAG/Cargo.toml 09_privilege_level/Cargo.toml
 -version = "0.8.0"
 +version = "0.9.0"
  authors = ["Andre Richter <andre.o.richter@gmail.com>"]
- edition = "2018"
+ edition = "2021"
 
 
 diff -uNr 08_hw_debug_JTAG/src/_arch/aarch64/cpu/boot.rs 09_privilege_level/src/_arch/aarch64/cpu/boot.rs
 --- 08_hw_debug_JTAG/src/_arch/aarch64/cpu/boot.rs
 +++ 09_privilege_level/src/_arch/aarch64/cpu/boot.rs
-@@ -12,11 +12,53 @@
+@@ -11,8 +11,53 @@
+ //!
  //! crate::cpu::boot::arch_boot
 
- use crate::runtime_init;
-+use cortex_a::{asm, regs::*};
-
++use core::arch::global_asm;
++use cortex_a::{asm, registers::*};
++use tock_registers::interfaces::Writeable;
++
  // Assembly counterpart to this file.
- global_asm!(include_str!("boot.s"));
-
- //--------------------------------------------------------------------------------------------------
+-core::arch::global_asm!(include_str!("boot.s"));
++global_asm!(include_str!("boot.s"));
++
++//--------------------------------------------------------------------------------------------------
 +// Private Code
 +//--------------------------------------------------------------------------------------------------
 +
@@ -256,30 +256,31 @@ diff -uNr 08_hw_debug_JTAG/src/_arch/aarch64/cpu/boot.rs 09_privilege_level/src/
 +            + SPSR_EL2::M::EL1h,
 +    );
 +
-+    // Second, let the link register point to runtime_init().
-+    ELR_EL2.set(runtime_init::runtime_init as *const () as u64);
++    // Second, let the link register point to kernel_init().
++    ELR_EL2.set(crate::kernel_init as *const () as u64);
 +
 +    // Set up SP_EL1 (stack pointer), which will be used by EL1 once we "return" to it. Since there
 +    // are no plans to ever return to EL2, just re-use the same stack.
 +    SP_EL1.set(phys_boot_core_stack_end_exclusive_addr);
 +}
-+
-+//--------------------------------------------------------------------------------------------------
- // Public Code
- //--------------------------------------------------------------------------------------------------
 
-@@ -27,7 +69,11 @@
- /// # Safety
+ //--------------------------------------------------------------------------------------------------
+ // Public Code
+@@ -21,7 +66,14 @@
+ /// The Rust entry of the `kernel` binary.
  ///
- /// - The `bss` section is not initialized yet. The code must not use or reference it in any way.
-+/// - Exception return from EL2 must must continue execution in EL1 with `runtime_init()`.
+ /// The function is called from the assembly `_start` function.
++///
++/// # Safety
++///
++/// - Exception return from EL2 must must continue execution in EL1 with `kernel_init()`.
  #[no_mangle]
 -pub unsafe fn _start_rust() -> ! {
--    runtime_init::runtime_init()
+-    crate::kernel_init()
 +pub unsafe extern "C" fn _start_rust(phys_boot_core_stack_end_exclusive_addr: u64) -> ! {
 +    prepare_el2_to_el1_transition(phys_boot_core_stack_end_exclusive_addr);
 +
-+    // Use `eret` to "return" to EL1. This results in execution of runtime_init() in EL1.
++    // Use `eret` to "return" to EL1. This results in execution of kernel_init() in EL1.
 +    asm::eret()
  }
 
@@ -301,15 +302,15 @@ diff -uNr 08_hw_debug_JTAG/src/_arch/aarch64/cpu/boot.s 09_privilege_level/src/_
 +	// Only proceed if the core executes in EL2. Park it otherwise.
 +	mrs	x0, CurrentEL
 +	cmp	x0, _EL2
-+	b.ne	1f
++	b.ne	.L_parking_loop
 +
  	// Only proceed on the boot core. Park it otherwise.
  	mrs	x1, MPIDR_EL1
  	and	x1, x1, _core_id_mask
-@@ -38,11 +44,11 @@
+@@ -50,11 +56,11 @@
 
- 	// If execution reaches here, it is the boot core. Now, prepare the jump to Rust code.
-
+ 	// Prepare the jump to Rust code.
+ .L_prepare_rust:
 -	// Set the stack pointer.
 +	// Set the stack pointer. This ensures that any code in EL2 that needs the stack will work.
  	ADR_REL	x0, __boot_core_stack_end_exclusive
@@ -324,10 +325,10 @@ diff -uNr 08_hw_debug_JTAG/src/_arch/aarch64/cpu/boot.s 09_privilege_level/src/_
 diff -uNr 08_hw_debug_JTAG/src/_arch/aarch64/exception/asynchronous.rs 09_privilege_level/src/_arch/aarch64/exception/asynchronous.rs
 --- 08_hw_debug_JTAG/src/_arch/aarch64/exception/asynchronous.rs
 +++ 09_privilege_level/src/_arch/aarch64/exception/asynchronous.rs
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,82 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Architectural asynchronous exception handling.
 +//!
@@ -338,14 +339,15 @@ diff -uNr 08_hw_debug_JTAG/src/_arch/aarch64/exception/asynchronous.rs 09_privil
 +//!
 +//! crate::exception::asynchronous::arch_asynchronous
 +
-+use cortex_a::regs::*;
++use cortex_a::registers::*;
++use tock_registers::interfaces::Readable;
 +
 +//--------------------------------------------------------------------------------------------------
 +// Private Definitions
 +//--------------------------------------------------------------------------------------------------
 +
 +trait DaifField {
-+    fn daif_field() -> register::Field<u64, DAIF::Register>;
++    fn daif_field() -> tock_registers::fields::Field<u64, DAIF::Register>;
 +}
 +
 +struct Debug;
@@ -358,25 +360,25 @@ diff -uNr 08_hw_debug_JTAG/src/_arch/aarch64/exception/asynchronous.rs 09_privil
 +//--------------------------------------------------------------------------------------------------
 +
 +impl DaifField for Debug {
-+    fn daif_field() -> register::Field<u64, DAIF::Register> {
++    fn daif_field() -> tock_registers::fields::Field<u64, DAIF::Register> {
 +        DAIF::D
 +    }
 +}
 +
 +impl DaifField for SError {
-+    fn daif_field() -> register::Field<u64, DAIF::Register> {
++    fn daif_field() -> tock_registers::fields::Field<u64, DAIF::Register> {
 +        DAIF::A
 +    }
 +}
 +
 +impl DaifField for IRQ {
-+    fn daif_field() -> register::Field<u64, DAIF::Register> {
++    fn daif_field() -> tock_registers::fields::Field<u64, DAIF::Register> {
 +        DAIF::I
 +    }
 +}
 +
 +impl DaifField for FIQ {
-+    fn daif_field() -> register::Field<u64, DAIF::Register> {
++    fn daif_field() -> tock_registers::fields::Field<u64, DAIF::Register> {
 +        DAIF::F
 +    }
 +}
@@ -410,10 +412,10 @@ diff -uNr 08_hw_debug_JTAG/src/_arch/aarch64/exception/asynchronous.rs 09_privil
 diff -uNr 08_hw_debug_JTAG/src/_arch/aarch64/exception.rs 09_privilege_level/src/_arch/aarch64/exception.rs
 --- 08_hw_debug_JTAG/src/_arch/aarch64/exception.rs
 +++ 09_privilege_level/src/_arch/aarch64/exception.rs
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,31 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Architectural synchronous and asynchronous exception handling.
 +//!
@@ -424,7 +426,8 @@ diff -uNr 08_hw_debug_JTAG/src/_arch/aarch64/exception.rs 09_privilege_level/src
 +//!
 +//! crate::exception::arch_exception
 +
-+use cortex_a::regs::*;
++use cortex_a::registers::*;
++use tock_registers::interfaces::Readable;
 +
 +//--------------------------------------------------------------------------------------------------
 +// Public Code
@@ -448,7 +451,7 @@ diff -uNr 08_hw_debug_JTAG/src/exception/asynchronous.rs 09_privilege_level/src/
 @@ -0,0 +1,14 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Asynchronous exception handling.
 +
@@ -467,7 +470,7 @@ diff -uNr 08_hw_debug_JTAG/src/exception.rs 09_privilege_level/src/exception.rs
 @@ -0,0 +1,30 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Synchronous and asynchronous exception handling.
 +
@@ -499,15 +502,15 @@ diff -uNr 08_hw_debug_JTAG/src/exception.rs 09_privilege_level/src/exception.rs
 diff -uNr 08_hw_debug_JTAG/src/main.rs 09_privilege_level/src/main.rs
 --- 08_hw_debug_JTAG/src/main.rs
 +++ 09_privilege_level/src/main.rs
-@@ -119,6 +119,7 @@
+@@ -116,6 +116,7 @@
  mod console;
  mod cpu;
  mod driver;
 +mod exception;
- mod memory;
  mod panic_wait;
  mod print;
-@@ -149,6 +150,8 @@
+ mod synchronization;
+@@ -144,6 +145,8 @@
 
  /// The main function running after the early init.
  fn kernel_main() -> ! {
@@ -516,7 +519,7 @@ diff -uNr 08_hw_debug_JTAG/src/main.rs 09_privilege_level/src/main.rs
      use core::time::Duration;
      use driver::interface::DriverManager;
      use time::interface::TimeManager;
-@@ -160,6 +163,12 @@
+@@ -155,6 +158,12 @@
      );
      info!("Booting on: {}", bsp::board_name());
 
@@ -529,7 +532,7 @@ diff -uNr 08_hw_debug_JTAG/src/main.rs 09_privilege_level/src/main.rs
      info!(
          "Architectural timer resolution: {} ns",
          time::time_manager().resolution().as_nanos()
-@@ -174,11 +183,15 @@
+@@ -169,11 +178,15 @@
          info!("      {}. {}", i + 1, driver.compatible());
      }
 
@@ -549,5 +552,14 @@ diff -uNr 08_hw_debug_JTAG/src/main.rs 09_privilege_level/src/main.rs
 +        bsp::console::console().write_char(c);
      }
  }
+
+diff -uNr 08_hw_debug_JTAG/tests/boot_test_string.rb 09_privilege_level/tests/boot_test_string.rb
+--- 08_hw_debug_JTAG/tests/boot_test_string.rb
++++ 09_privilege_level/tests/boot_test_string.rb
+@@ -1,3 +1,3 @@
+ # frozen_string_literal: true
+
+-EXPECTED_PRINT = 'Spinning for 1 second'
++EXPECTED_PRINT = 'Echoing input now'
 
 ```

@@ -5,7 +5,7 @@
 
 <br/>
 
-<img src="doc/header.jpg" height="379"> <img src="doc/minipush_demo_frontpage.gif" height="379">
+<img src="doc/header.jpg" height="372"> <img src="doc/minipush_demo_frontpage.gif" height="372">
 
 ## ?? Introduction
 
@@ -76,8 +76,7 @@ moment though.
 
 ## ? System Requirements
 
-The tutorials are primarily targeted at **Linux**-based distributions. Most stuff will also work on
-other Unix flavors such as **macOS**, but this is only _experimental_.
+The tutorials are primarily targeted at **Linux**-based distributions. Most stuff will also work on **macOS**, but this is only _experimental_.
 
 この解説は主にLinux-based distributionsを対象とします．ほとんどの要素はmaxOSなどのUnix風OSでも動きますが，実験的なものです．
 
@@ -88,6 +87,8 @@ other Unix flavors such as **macOS**, but this is only _experimental_.
 1. Dockerを導入
 1. Ensure your user account is in the [docker group].
 1. アカウントがdocker groupにあることを確認してください．
+1. [Install Docker Desktop][install_docker].
+1. (**Linux only**) Ensure your user account is in the [docker group].
 1. Prepare the `Rust` toolchain. Most of it will be handled on first use through the
    [rust-toolchain](rust-toolchain) file. What's left for us to do is:
    1. If you already have a version of Rust installed:
@@ -118,11 +119,12 @@ other Unix flavors such as **macOS**, but this is only _experimental_.
 1. In case you use `Visual Studio Code`, I strongly recommend installing the [Rust Analyzer extension].
 1. Visual Studio Codeを使用する場合，Rust Analyzer extensionの導入を強く勧める．
 1. If you are **NOT** running Linux, some `Ruby` gems are needed as well:
+1. (**macOS only**) Install a few `Ruby` gems.
+
+   Run this in the repository root folder:
 
    ```bash
-   sudo gem install bundler
-   bundle config set path '.vendor/bundle'
-   bundle install
+   bundle install --path .vendor/bundle --without development
    ```
 1. Linuxを動かさない場合，何かしらのRubyのgem(Rubyのライブラリ)が必要になります．:w
    ```bash

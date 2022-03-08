@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2021-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Architectural boot code.
 //!
@@ -11,10 +11,8 @@
 //!
 //! crate::cpu::boot::arch_boot
 
-use crate::runtime_init; // ../../../runtime_init.rsを使うよ．
-
 // Assembly counterpart to this file.
-global_asm!(include_str!("boot.s")); // ./boot.sを取り込むよ．
+core::arch::global_asm!(include_str!("boot.s"));
 
 //--------------------------------------------------------------------------------------------------
 // Public Code
@@ -30,5 +28,5 @@ global_asm!(include_str!("boot.s")); // ./boot.sを取り込むよ．
 /// `bss`領域がまだ初期化されていないので，ここで`bss`領域を使っちゃいけないよ．
 #[no_mangle]
 pub unsafe fn _start_rust() -> ! {
-    runtime_init::runtime_init() // ../../../runtime_init.rsのruntime_initに飛ぶよ．
+    crate::kernel_init()
 }

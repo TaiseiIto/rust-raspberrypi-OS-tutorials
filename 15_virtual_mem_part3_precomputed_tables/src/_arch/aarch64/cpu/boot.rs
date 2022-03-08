@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2021-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Architectural boot code.
 //!
@@ -11,9 +11,10 @@
 //!
 //! crate::cpu::boot::arch_boot
 
-use crate::{cpu, memory, memory::Address, runtime_init};
-use core::intrinsics::unlikely;
-use cortex_a::{asm, regs::*};
+use crate::{memory, memory::Address};
+use core::arch::global_asm;
+use cortex_a::{asm, registers::*};
+use tock_registers::interfaces::Writeable;
 
 // Assembly counterpart to this file.
 global_asm!(include_str!("boot.s"));
@@ -51,8 +52,8 @@ unsafe fn prepare_el2_to_el1_transition(phys_boot_core_stack_end_exclusive_addr:
             + SPSR_EL2::M::EL1h,
     );
 
-    // Second, let the link register point to runtime_init().
-    ELR_EL2.set(runtime_init::runtime_init as *const () as u64);
+    // Second, let the link register point to kernel_init().
+    ELR_EL2.set(crate::kernel_init as *const () as u64);
 
     // Set up SP_EL1 (stack pointer), which will be used by EL1 once we "return" to it. Since there
     // are no plans to ever return to EL2, just re-use the same stack.
@@ -69,8 +70,7 @@ unsafe fn prepare_el2_to_el1_transition(phys_boot_core_stack_end_exclusive_addr:
 ///
 /// # Safety
 ///
-/// - The `bss` section is not initialized yet. The code must not use or reference it in any way.
-/// - Exception return from EL2 must must continue execution in EL1 with `runtime_init()`.
+/// - Exception return from EL2 must must continue execution in EL1 with `kernel_init()`.
 #[no_mangle]
 pub unsafe extern "C" fn _start_rust(
     phys_kernel_tables_base_addr: u64,
@@ -80,10 +80,8 @@ pub unsafe extern "C" fn _start_rust(
 
     // Turn on the MMU for EL1.
     let addr = Address::new(phys_kernel_tables_base_addr as usize);
-    if unlikely(memory::mmu::enable_mmu_and_caching(addr).is_err()) {
-        cpu::wait_forever();
-    }
+    memory::mmu::enable_mmu_and_caching(addr).unwrap();
 
-    // Use `eret` to "return" to EL1. This results in execution of runtime_init() in EL1.
+    // Use `eret` to "return" to EL1. This results in execution of kernel_init() in EL1.
     asm::eret()
 }

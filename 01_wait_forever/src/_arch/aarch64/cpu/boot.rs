@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2021-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Architectural boot code.
 //!
@@ -14,4 +14,4 @@
 // Assembly counterpart to this file.
 // boot.sのassemblyをこのrustにincludeする的な?
 // そうするとこのfileからboot.sで定義されたsymbolを使えるようになる的な?
-global_asm!(include_str!("boot.s"));
+core::arch::global_asm!(include_str!("boot.s"));

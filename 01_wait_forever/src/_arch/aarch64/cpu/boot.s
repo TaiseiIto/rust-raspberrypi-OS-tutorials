@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2021-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //--------------------------------------------------------------------------------------------------
 // Public Code
@@ -13,10 +13,11 @@
 //------------------------------------------------------------------------------
 _start:
 	// Infinitely wait for events (aka "park the core").
-1:	wfe
     //指定されたlabelへの無条件分岐(1bというlabelが見当たらないが...1を指してるのか?)
 	//https://developer.arm.com/documentation/100076/0100/a64-instruction-set-reference/a64-general-instructions/b?lang=en
-	b	1b
+.L_parking_loop:
+	wfe
+	b	.L_parking_loop
 
 //_startの大きさはここの番地-_startの番地ですよ的な
 .size	_start, . - _start

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! GICD Driver - GIC Distributor.
 //!
@@ -12,7 +12,11 @@ use crate::{
     state, synchronization,
     synchronization::{IRQSafeNullLock, InitStateLock},
 };
-use register::{mmio::*, register_bitfields, register_structs};
+use tock_registers::{
+    interfaces::{Readable, Writeable},
+    register_bitfields, register_structs,
+    registers::{ReadOnly, ReadWrite},
+};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions

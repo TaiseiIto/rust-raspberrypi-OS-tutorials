@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Architectural symmetric multiprocessing.
 //!
@@ -11,7 +11,8 @@
 //!
 //! crate::cpu::smp::arch_smp
 
-use cortex_a::regs::*;
+use cortex_a::registers::*;
+use tock_registers::interfaces::Readable;
 
 //--------------------------------------------------------------------------------------------------
 // Public Code

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2021-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Architectural translation table.
 //!
@@ -14,18 +14,22 @@
 //! crate::memory::mmu::translation_table::arch_translation_table
 
 use crate::{
-    bsp, memory,
+    bsp,
     memory::{
+        self,
         mmu::{
             arch_mmu::{Granule512MiB, Granule64KiB},
-            AccessPermissions, AttributeFields, MemAttributes, Page, PageSliceDescriptor,
+            AccessPermissions, AttributeFields, MemAttributes, MemoryRegion, PageAddress,
         },
         Address, Physical, Virtual,
     },
-    // 新しいcrate memory::mmu::Page, memory::mmu::PageSliceDescriptor, memory::Address, memory::Physical, memory::Virtual
 };
 use core::convert;
-use register::{register_bitfields, InMemoryRegister};
+use tock_registers::{
+    interfaces::{Readable, Writeable},
+    register_bitfields,
+    registers::InMemoryRegister,
+};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions
@@ -140,10 +144,6 @@ pub struct FixedSizeTranslationTable<const NUM_TABLES: usize> {
     /// Table descriptors, covering 512 MiB windows.
     lvl2: [TableDescriptor; NUM_TABLES],
 
-    /// Index of the next free MMIO page.
-    /// 次の空きMMIO pageのindex
-    cur_l3_mmio_index: usize,
-
     /// Have the tables been initialized?
     /// Tablesが初期化されているかどうか
     initialized: bool,
@@ -175,7 +175,7 @@ impl TableDescriptor {
         let val = InMemoryRegister::<u64, STAGE1_TABLE_DESCRIPTOR::Register>::new(0);
 
         // into_usize()でAddress<Physical>をusizeに変更
-        let shifted = phys_next_lvl_table_addr.into_usize() >> Granule64KiB::SHIFT;
+        let shifted = phys_next_lvl_table_addr.as_usize() >> Granule64KiB::SHIFT;
         val.write(
             STAGE1_TABLE_DESCRIPTOR::NEXT_LEVEL_TABLE_ADDR_64KiB.val(shifted as u64)
                 + STAGE1_TABLE_DESCRIPTOR::TYPE::Table
@@ -188,7 +188,7 @@ impl TableDescriptor {
 
 /// Convert the kernel's generic memory attributes to HW-specific attributes of the MMU.
 impl convert::From<AttributeFields>
-    for register::FieldValue<u64, STAGE1_PAGE_DESCRIPTOR::Register>
+    for tock_registers::fields::FieldValue<u64, STAGE1_PAGE_DESCRIPTOR::Register>
 {
     fn from(attribute_fields: AttributeFields) -> Self {
         // Memory attributes.
@@ -233,15 +233,15 @@ impl PageDescriptor {
 
     /// Create an instance.
     /// 引数phys_output_addrをusize型で受け取っていたのをPage<Physical>型に変更
-    pub fn from_output_addr(
-        phys_output_addr: *const Page<Physical>,
+    pub fn from_output_page_addr(
+        phys_output_page_addr: PageAddress<Physical>,
         attribute_fields: &AttributeFields,
     ) -> Self {
         let val = InMemoryRegister::<u64, STAGE1_PAGE_DESCRIPTOR::Register>::new(0);
 
-        let shifted = phys_output_addr as u64 >> Granule64KiB::SHIFT;
+        let shifted = phys_output_page_addr.into_inner().as_usize() >> Granule64KiB::SHIFT;
         val.write(
-            STAGE1_PAGE_DESCRIPTOR::OUTPUT_ADDR_64KiB.val(shifted)
+            STAGE1_PAGE_DESCRIPTOR::OUTPUT_ADDR_64KiB.val(shifted as u64)
                 + STAGE1_PAGE_DESCRIPTOR::AF::True
                 + STAGE1_PAGE_DESCRIPTOR::TYPE::Page
                 + STAGE1_PAGE_DESCRIPTOR::VALID::True
@@ -275,12 +275,6 @@ where
 }
 
 impl<const NUM_TABLES: usize> FixedSizeTranslationTable<NUM_TABLES> {
-    // Reserve the last 256 MiB of the address space for MMIO mappings.
-    // MMIO領域のL2 tableとL3 tableにおけるindex
-    // 8GiBの仮想address空間の最後の256MiBをMMIOとする
-    const L2_MMIO_START_INDEX: usize = NUM_TABLES - 1;
-    const L3_MMIO_START_INDEX: usize = 8192 / 2;
-
     /// Create an instance.
     #[allow(clippy::assertions_on_constants)]
     pub const fn new() -> Self {
@@ -292,42 +286,20 @@ impl<const NUM_TABLES: usize> FixedSizeTranslationTable<NUM_TABLES> {
         Self {
             lvl3: [[PageDescriptor::new_zeroed(); 8192]; NUM_TABLES],
             lvl2: [TableDescriptor::new_zeroed(); NUM_TABLES],
-            cur_l3_mmio_index: 0, // 次の空きMMIO pageのindexは0
-            initialized: false,   // 最初は初期化されていない
+            initialized: false,
         }
-    }
-
-    /// The start address of the table's MMIO range.
-    /// MMIO領域の始点となる仮想addressを返す
-    #[inline(always)]
-    fn mmio_start_addr(&self) -> Address<Virtual> {
-        Address::new(
-            (Self::L2_MMIO_START_INDEX << Granule512MiB::SHIFT)       // L2_MMIO_START_INDEXはL2 tableにおけるindex
-                | (Self::L3_MMIO_START_INDEX << Granule64KiB::SHIFT), // L3_MMIO_START_INDEXはL3 tableにおけるindex
-        )
-    }
-
-    /// The inclusive end address of the table's MMIO range.
-    /// MMIO領域の終点となる仮想addressを返す
-    #[inline(always)]
-    fn mmio_end_addr_inclusive(&self) -> Address<Virtual> {
-        Address::new(
-            (Self::L2_MMIO_START_INDEX << Granule512MiB::SHIFT)
-                | (8191 << Granule64KiB::SHIFT) // 当該L3 tableの最後のindex
-                | (Granule64KiB::SIZE - 1),     // 当該pageの最後のaddress
-        )
     }
 
     /// Helper to calculate the lvl2 and lvl3 indices from an address.
     /// 仮想addressからlvl2, lvl3 tableにおけるindexを求める
     #[inline(always)]
-    fn lvl2_lvl3_index_from(
+    fn lvl2_lvl3_index_from_page_addr(
         &self,
-        addr: *const Page<Virtual>,
+        virt_page_addr: PageAddress<Virtual>,
     ) -> Result<(usize, usize), &'static str> {
-        let addr = addr as usize; // addrをusizeに変換
-        let lvl2_index = addr >> Granule512MiB::SHIFT; // lvl2 tableにおけるindex
-        let lvl3_index = (addr & Granule512MiB::MASK) >> Granule64KiB::SHIFT; // lvl3 tableにおけるindex
+        let addr = virt_page_addr.into_inner().as_usize();
+        let lvl2_index = addr >> Granule512MiB::SHIFT;
+        let lvl3_index = (addr & Granule512MiB::MASK) >> Granule64KiB::SHIFT;
 
         if lvl2_index > (NUM_TABLES - 1) {
             return Err("Virtual page is out of bounds of translation table");
@@ -338,14 +310,24 @@ impl<const NUM_TABLES: usize> FixedSizeTranslationTable<NUM_TABLES> {
 
     /// Returns the PageDescriptor corresponding to the supplied Page.
     /// 引数addrで与えられたpageに対応するPageDescriptorを求める
+    /// Sets the PageDescriptor corresponding to the supplied page address.
+    ///
+    /// Doesn't allow overriding an already valid page.
     #[inline(always)]
-    fn page_descriptor_from(
+    fn set_page_descriptor_from_page_addr(
         &mut self,
-        addr: *const Page<Virtual>,
-    ) -> Result<&mut PageDescriptor, &'static str> {
-        let (lvl2_index, lvl3_index) = self.lvl2_lvl3_index_from(addr)?; // 仮想addressからlvl2, lvl3のindexを求める
+        virt_page_addr: PageAddress<Virtual>,
+        new_desc: &PageDescriptor,
+    ) -> Result<(), &'static str> {
+        let (lvl2_index, lvl3_index) = self.lvl2_lvl3_index_from_page_addr(virt_page_addr)?;
+        let desc = &mut self.lvl3[lvl2_index][lvl3_index];
 
-        Ok(&mut self.lvl3[lvl2_index][lvl3_index]) // 求めたindexからPageDescriptorを返す
+        if desc.is_valid() {
+            return Err("Virtual page is already mapped");
+        }
+
+        *desc = *new_desc;
+        Ok(())
     }
 }
 
@@ -353,7 +335,8 @@ impl<const NUM_TABLES: usize> FixedSizeTranslationTable<NUM_TABLES> {
 // OS Interface Code
 //------------------------------------------------------------------------------
 
-// FixedSizeTranslationTable<NUM_TABLES>構造体に対してmemory::mmu::translation_table::interface::TranslationTableを実装
+// FixedSizeTranslationTable<NUM_TABLES>構造体に対してmemory::mmu::translation_table::interface::
+// TranslationTableを実装
 impl<const NUM_TABLES: usize> memory::mmu::translation_table::interface::TranslationTable
     for FixedSizeTranslationTable<NUM_TABLES>
 {
@@ -366,15 +349,12 @@ impl<const NUM_TABLES: usize> memory::mmu::translation_table::interface::Transla
         // Populate the l2 entries.
         // lvl2 tableの初期化
         for (lvl2_nr, lvl2_entry) in self.lvl2.iter_mut().enumerate() {
-            // 各lvl2_entryに対応するlvl3 tableの始点物理addressを入れていく
-            let desc =
-                TableDescriptor::from_next_lvl_table_addr(self.lvl3[lvl2_nr].phys_start_addr());
-            *lvl2_entry = desc;
+            let phys_table_addr = self.lvl3[lvl2_nr].phys_start_addr();
+
+            let new_desc = TableDescriptor::from_next_lvl_table_addr(phys_table_addr);
+            *lvl2_entry = new_desc;
         }
 
-        // 次の空きMMIO pageのindex
-        self.cur_l3_mmio_index = Self::L3_MMIO_START_INDEX;
-        // 初期化完了flagを立てる
         self.initialized = true;
     }
 
@@ -384,95 +364,33 @@ impl<const NUM_TABLES: usize> memory::mmu::translation_table::interface::Transla
     }
 
     // 仮想page sliceと物理page sliceを対応させる
-    unsafe fn map_pages_at(
+    unsafe fn map_at(
         &mut self,
-        virt_pages: &PageSliceDescriptor<Virtual>,
-        phys_pages: &PageSliceDescriptor<Physical>,
+        virt_region: &MemoryRegion<Virtual>,
+        phys_region: &MemoryRegion<Physical>,
         attr: &AttributeFields,
     ) -> Result<(), &'static str> {
         // selfが初期化されていない時に警告
         assert!(self.initialized, "Translation tables not initialized");
 
-        let p = phys_pages.as_slice();
-        let v = virt_pages.as_slice();
-
-        // No work to do for empty slices.
-        if v.is_empty() {
-            // virt_pagesが空の場合何もしない
-            return Ok(());
+        if virt_region.size() != phys_region.size() {
+            return Err("Tried to map memory regions with unequal sizes");
         }
 
-        if v.len() != p.len() {
-            // 仮想pageと物理pageのsliceの要素数が違う場合全単射を作れないので諦める
-            return Err("Tried to map page slices with unequal sizes");
-        }
-
-        if p.last().unwrap().as_ptr() >= bsp::memory::mmu::phys_addr_space_end_page() {
-            // 物理memoryの大きさを超えた物理pageがslice内にある場合も諦める
+        if phys_region.end_exclusive_page_addr() > bsp::memory::phys_addr_space_end_exclusive_addr()
+        {
             return Err("Tried to map outside of physical address space");
         }
 
-        // 物理pageと仮想pageの組のイテレータを作ってforで順番に対応付けていく
-        let iter = p.iter().zip(v.iter());
-        for (phys_page, virt_page) in iter {
-            // 仮想pageのpage_descriptor
-            let page_descriptor = self.page_descriptor_from(virt_page.as_ptr())?;
-            if page_descriptor.is_valid() {
-                // 作成した仮想pageが既に物理pageに対応付けられている場合，諦める
-                return Err("Virtual page is already mapped");
-            }
-            // 仮想pageのpage_descriptorに物理pageを紐づける
-            *page_descriptor = PageDescriptor::from_output_addr(phys_page.as_ptr(), &attr);
+        let iter = phys_region.into_iter().zip(virt_region.into_iter());
+        for (phys_page_addr, virt_page_addr) in iter {
+            let new_desc = PageDescriptor::from_output_page_addr(phys_page_addr, attr);
+            let virt_page = virt_page_addr;
+
+            self.set_page_descriptor_from_page_addr(virt_page, &new_desc)?;
         }
 
         Ok(())
-    }
-
-    // 新しいMMIO領域を割り当てる
-    fn next_mmio_virt_page_slice(
-        &mut self,
-        num_pages: usize, // 要求page数
-    ) -> Result<PageSliceDescriptor<Virtual>, &'static str> {
-        // selfが初期化されていない時に警告
-        assert!(self.initialized, "Translation tables not initialized");
-
-        if num_pages == 0 {
-            // 要求するpage数が0の場合何もしない
-            return Err("num_pages == 0");
-        }
-
-        if (self.cur_l3_mmio_index + num_pages) > 8191 {
-            // 残っているpage数が足りない場合諦める
-            return Err("Not enough MMIO space left");
-        }
-
-        // 今回割り当てるMMIO領域の仮想address
-        let addr = Address::new(
-            (Self::L2_MMIO_START_INDEX << Granule512MiB::SHIFT)
-                | (self.cur_l3_mmio_index << Granule64KiB::SHIFT),
-        );
-        // 次の空きMMIO pageのindexを更新する
-        self.cur_l3_mmio_index += num_pages;
-
-        // 確保したMMIO領域の仮想page sliceを返す
-        Ok(PageSliceDescriptor::from_addr(addr, num_pages))
-    }
-
-    // 引数で与えられた仮想page sliceにMMIO領域が含まれているかどうか
-    fn is_virt_page_slice_mmio(&self, virt_pages: &PageSliceDescriptor<Virtual>) -> bool {
-        // 引数で与えられた仮想page sliceの始めのpageと終わりのpage
-        let start_addr = virt_pages.start_addr();
-        let end_addr_inclusive = virt_pages.end_addr_inclusive();
-
-        // slice内の仮想pageを順番に確認していく
-        for i in [start_addr, end_addr_inclusive].iter() {
-            if (*i >= self.mmio_start_addr()) && (*i <= self.mmio_end_addr_inclusive()) {
-                // ひとつでもMMIO領域であればtrue
-                return true;
-            }
-        }
-        // MMIO領域が含まれていなければfalse
-        false
     }
 }
 

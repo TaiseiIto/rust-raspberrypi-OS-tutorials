@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! A panic handler that infinitely waits.
 
@@ -23,12 +23,12 @@ fn _panic_print(args: fmt::Arguments) {
 #[linkage = "weak"]
 #[no_mangle]
 fn _panic_exit() -> ! {
-    #[cfg(not(test_build))]
+    #[cfg(not(feature = "test_build"))]
     {
         cpu::wait_forever()
     }
 
-    #[cfg(test_build)]
+    #[cfg(feature = "test_build")]
     {
         cpu::qemu_exit_failure()
     }

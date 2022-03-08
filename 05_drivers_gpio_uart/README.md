@@ -118,7 +118,7 @@ diff -uNr 04_safe_globals/Cargo.toml 05_drivers_gpio_uart/Cargo.toml
 -version = "0.4.0"
 +version = "0.5.0"
  authors = ["Andre Richter <andre.o.richter@gmail.com>"]
- edition = "2018"
+ edition = "2021"
 
 @@ -9,8 +9,8 @@
 
@@ -126,8 +126,8 @@ diff -uNr 04_safe_globals/Cargo.toml 05_drivers_gpio_uart/Cargo.toml
  default = []
 -bsp_rpi3 = []
 -bsp_rpi4 = []
-+bsp_rpi3 = ["register"]
-+bsp_rpi4 = ["register"]
++bsp_rpi3 = ["tock-registers"]
++bsp_rpi4 = ["tock-registers"]
 
  [[bin]]
  name = "kernel"
@@ -136,64 +136,74 @@ diff -uNr 04_safe_globals/Cargo.toml 05_drivers_gpio_uart/Cargo.toml
  [dependencies]
 
 +# Optional dependencies
-+register = { version = "1.x.x", optional = true }
++tock-registers = { version = "0.7.x", default-features = false, features = ["register_types"], optional = true }
 +
  # Platform specific dependencies
  [target.'cfg(target_arch = "aarch64")'.dependencies]
- cortex-a = { version = "5.x.x" }
+ cortex-a = { version = "7.x.x" }
 
 diff -uNr 04_safe_globals/Makefile 05_drivers_gpio_uart/Makefile
 --- 04_safe_globals/Makefile
 +++ 05_drivers_gpio_uart/Makefile
-@@ -7,6 +7,12 @@
- # Default to the RPi3
+@@ -12,6 +12,9 @@
+ # Default to the RPi3.
  BSP ?= rpi3
 
 +# Default to a serial device name that is common in Linux.
 +DEV_SERIAL ?= /dev/ttyUSB0
 +
-+# Query the host system's kernel name
-+UNAME_S = $(shell uname -s)
-+
- # BSP-specific arguments
- ifeq ($(BSP),rpi3)
-     TARGET            = aarch64-unknown-none-softfloat
-@@ -58,13 +64,23 @@
- DOCKER_IMAGE         = rustembedded/osdev-utils
- DOCKER_CMD           = docker run --rm -v $(shell pwd):/work/tutorial -w /work/tutorial
- DOCKER_CMD_INTERACT  = $(DOCKER_CMD) -i -t
-+DOCKER_ARG_DIR_UTILS = -v $(shell pwd)/../utils:/work/utils
-+DOCKER_ARG_DEV       = --privileged -v /dev:/dev
 
+
+ ##--------------------------------------------------------------------------------------------------
+@@ -73,6 +76,7 @@
+
+ EXEC_QEMU          = $(QEMU_BINARY) -M $(QEMU_MACHINE_TYPE)
+ EXEC_TEST_DISPATCH = ruby ../common/tests/dispatch.rb
++EXEC_MINITERM      = ruby ../common/serial/miniterm.rb
+
+ ##------------------------------------------------------------------------------
+ ## Dockerization
+@@ -80,18 +84,26 @@
+ DOCKER_CMD            = docker run -t --rm -v $(shell pwd):/work/tutorial -w /work/tutorial
+ DOCKER_CMD_INTERACT   = $(DOCKER_CMD) -i
+ DOCKER_ARG_DIR_COMMON = -v $(shell pwd)/../common:/work/common
++DOCKER_ARG_DEV        = --privileged -v /dev:/dev
+
+ # DOCKER_IMAGE defined in include file (see top of this file).
  DOCKER_QEMU  = $(DOCKER_CMD_INTERACT) $(DOCKER_IMAGE)
  DOCKER_TOOLS = $(DOCKER_CMD) $(DOCKER_IMAGE)
+ DOCKER_TEST  = $(DOCKER_CMD) $(DOCKER_ARG_DIR_COMMON) $(DOCKER_IMAGE)
 
--EXEC_QEMU = $(QEMU_BINARY) -M $(QEMU_MACHINE_TYPE)
-+# Dockerize commands that require USB device passthrough only on Linux
-+ifeq ($(UNAME_S),Linux)
++# Dockerize commands, which require USB device passthrough, only on Linux.
++ifeq ($(shell uname -s),Linux)
 +    DOCKER_CMD_DEV = $(DOCKER_CMD_INTERACT) $(DOCKER_ARG_DEV)
 +
-+    DOCKER_MINITERM = $(DOCKER_CMD_DEV) $(DOCKER_ARG_DIR_UTILS) $(DOCKER_IMAGE)
++    DOCKER_MINITERM = $(DOCKER_CMD_DEV) $(DOCKER_ARG_DIR_COMMON) $(DOCKER_IMAGE)
 +endif
 +
-+EXEC_QEMU     = $(QEMU_BINARY) -M $(QEMU_MACHINE_TYPE)
-+EXEC_MINITERM = ruby ../utils/miniterm.rb
 
+
+ ##--------------------------------------------------------------------------------------------------
+ ## Targets
+ ##--------------------------------------------------------------------------------------------------
 -.PHONY: all $(KERNEL_ELF) $(KERNEL_BIN) doc qemu clippy clean readelf objdump nm check
 +.PHONY: all $(KERNEL_ELF) $(KERNEL_BIN) doc qemu miniterm clippy clean readelf objdump nm check
 
  all: $(KERNEL_BIN)
 
-@@ -88,6 +104,9 @@
- 	@$(DOCKER_QEMU) $(EXEC_QEMU) $(QEMU_RELEASE_ARGS) -kernel $(KERNEL_BIN)
+@@ -131,6 +143,12 @@
  endif
 
+ ##------------------------------------------------------------------------------
++## Connect to the target's serial
++##------------------------------------------------------------------------------
 +miniterm:
 +	@$(DOCKER_MINITERM) $(EXEC_MINITERM) $(DEV_SERIAL)
 +
++##------------------------------------------------------------------------------
+ ## Run clippy
+ ##------------------------------------------------------------------------------
  clippy:
- 	@RUSTFLAGS="$(RUSTFLAGS_PEDANTIC)" $(CLIPPY_CMD)
-
 
 diff -uNr 04_safe_globals/src/_arch/aarch64/cpu.rs 05_drivers_gpio_uart/src/_arch/aarch64/cpu.rs
 --- 04_safe_globals/src/_arch/aarch64/cpu.rs
@@ -220,10 +230,10 @@ diff -uNr 04_safe_globals/src/_arch/aarch64/cpu.rs 05_drivers_gpio_uart/src/_arc
 diff -uNr 04_safe_globals/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs 05_drivers_gpio_uart/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs
 --- 04_safe_globals/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs
 +++ 05_drivers_gpio_uart/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs
-@@ -0,0 +1,221 @@
+@@ -0,0 +1,225 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! GPIO Driver.
 +
@@ -231,7 +241,11 @@ diff -uNr 04_safe_globals/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs 05_drivers_g
 +    bsp::device_driver::common::MMIODerefWrapper, driver, synchronization,
 +    synchronization::NullLock,
 +};
-+use register::{mmio::*, register_bitfields, register_structs};
++use tock_registers::{
++    interfaces::{ReadWriteable, Writeable},
++    register_bitfields, register_structs,
++    registers::ReadWrite,
++};
 +
 +//--------------------------------------------------------------------------------------------------
 +// Private Definitions
@@ -446,10 +460,10 @@ diff -uNr 04_safe_globals/src/bsp/device_driver/bcm/bcm2xxx_gpio.rs 05_drivers_g
 diff -uNr 04_safe_globals/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 05_drivers_gpio_uart/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs
 --- 04_safe_globals/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs
 +++ 05_drivers_gpio_uart/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs
-@@ -0,0 +1,403 @@
+@@ -0,0 +1,402 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! PL011 UART driver.
 +//!
@@ -463,7 +477,11 @@ diff -uNr 04_safe_globals/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 05_dri
 +    synchronization::NullLock,
 +};
 +use core::fmt;
-+use register::{mmio::*, register_bitfields, register_structs};
++use tock_registers::{
++    interfaces::{Readable, Writeable},
++    register_bitfields, register_structs,
++    registers::{ReadOnly, ReadWrite, WriteOnly},
++};
 +
 +//--------------------------------------------------------------------------------------------------
 +// Private Definitions
@@ -491,12 +509,6 @@ diff -uNr 04_safe_globals/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 05_dri
 +        /// - If the FIFO is disabled, this bit is set when the transmit holding register is full.
 +        /// - If the FIFO is enabled, the TXFF bit is set when the transmit FIFO is full.
 +        TXFF OFFSET(5) NUMBITS(1) [],
-+
-+        /// Receive FIFO empty. The meaning of this bit depends on the state of the FEN bit in the
-+        /// LCR_H Register.
-+        ///
-+        /// If the FIFO is disabled, this bit is set when the receive holding register is empty. If
-+        /// the FIFO is enabled, the RXFE bit is set when the receive FIFO is empty.
 +
 +        /// Receive FIFO empty. The meaning of this bit depends on the state of the FEN bit in the
 +        /// LCR_H Register.
@@ -530,6 +542,7 @@ diff -uNr 04_safe_globals/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs 05_dri
 +    LCR_H [
 +        /// Word length. These bits indicate the number of data bits transmitted or received in a
 +        /// frame.
++        #[allow(clippy::enum_variant_names)]
 +        WLEN OFFSET(5) NUMBITS(2) [
 +            FiveBit = 0b00,
 +            SixBit = 0b01,
@@ -857,7 +870,7 @@ diff -uNr 04_safe_globals/src/bsp/device_driver/bcm.rs 05_drivers_gpio_uart/src/
 @@ -0,0 +1,11 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! BCM driver top level.
 +
@@ -873,7 +886,7 @@ diff -uNr 04_safe_globals/src/bsp/device_driver/common.rs 05_drivers_gpio_uart/s
 @@ -0,0 +1,38 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Common device driver code.
 +
@@ -916,7 +929,7 @@ diff -uNr 04_safe_globals/src/bsp/device_driver.rs 05_drivers_gpio_uart/src/bsp/
 @@ -0,0 +1,12 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Device driver.
 +
@@ -1069,7 +1082,7 @@ diff -uNr 04_safe_globals/src/bsp/raspberrypi/driver.rs 05_drivers_gpio_uart/src
 @@ -0,0 +1,49 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! BSP driver support.
 +
@@ -1120,10 +1133,14 @@ diff -uNr 04_safe_globals/src/bsp/raspberrypi/driver.rs 05_drivers_gpio_uart/src
 diff -uNr 04_safe_globals/src/bsp/raspberrypi/memory.rs 05_drivers_gpio_uart/src/bsp/raspberrypi/memory.rs
 --- 04_safe_globals/src/bsp/raspberrypi/memory.rs
 +++ 05_drivers_gpio_uart/src/bsp/raspberrypi/memory.rs
-@@ -17,6 +17,38 @@
- }
-
- //--------------------------------------------------------------------------------------------------
+@@ -0,0 +1,37 @@
++// SPDX-License-Identifier: MIT OR Apache-2.0
++//
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
++
++//! BSP Memory Management.
++
++//--------------------------------------------------------------------------------------------------
 +// Public Definitions
 +//--------------------------------------------------------------------------------------------------
 +
@@ -1154,21 +1171,16 @@ diff -uNr 04_safe_globals/src/bsp/raspberrypi/memory.rs 05_drivers_gpio_uart/src
 +        pub const PL011_UART_START: usize = START + UART_OFFSET;
 +    }
 +}
-+
-+//--------------------------------------------------------------------------------------------------
- // Public Code
- //--------------------------------------------------------------------------------------------------
-
 
 diff -uNr 04_safe_globals/src/bsp/raspberrypi.rs 05_drivers_gpio_uart/src/bsp/raspberrypi.rs
 --- 04_safe_globals/src/bsp/raspberrypi.rs
 +++ 05_drivers_gpio_uart/src/bsp/raspberrypi.rs
-@@ -6,4 +6,33 @@
+@@ -6,3 +6,33 @@
 
  pub mod console;
  pub mod cpu;
 +pub mod driver;
- pub mod memory;
++pub mod memory;
 +
 +//--------------------------------------------------------------------------------------------------
 +// Global instances
@@ -1275,7 +1287,7 @@ diff -uNr 04_safe_globals/src/driver.rs 05_drivers_gpio_uart/src/driver.rs
 @@ -0,0 +1,44 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Driver support.
 +
@@ -1321,24 +1333,24 @@ diff -uNr 04_safe_globals/src/driver.rs 05_drivers_gpio_uart/src/driver.rs
 diff -uNr 04_safe_globals/src/main.rs 05_drivers_gpio_uart/src/main.rs
 --- 04_safe_globals/src/main.rs
 +++ 05_drivers_gpio_uart/src/main.rs
-@@ -106,6 +106,8 @@
- //!
- //! [`runtime_init::runtime_init()`]: runtime_init/fn.runtime_init.html
+@@ -104,6 +104,8 @@
+ //!     - It is implemented in `src/_arch/__arch_name__/cpu/boot.s`.
+ //! 2. Once finished with architectural setup, the arch code calls `kernel_init()`.
 
 +#![allow(clippy::upper_case_acronyms)]
 +#![feature(const_fn_fn_ptr_basics)]
  #![feature(format_args_nl)]
- #![feature(global_asm)]
  #![feature(panic_info_message)]
-@@ -116,6 +118,7 @@
+ #![feature(trait_alias)]
+@@ -113,6 +115,7 @@
  mod bsp;
  mod console;
  mod cpu;
 +mod driver;
- mod memory;
  mod panic_wait;
  mod print;
-@@ -127,16 +130,54 @@
+ mod synchronization;
+@@ -122,16 +125,54 @@
  /// # Safety
  ///
  /// - Only a single core must be active and running this function.
@@ -1442,5 +1454,14 @@ diff -uNr 04_safe_globals/src/panic_wait.rs 05_drivers_gpio_uart/src/panic_wait.
      }
 
      cpu::wait_forever()
+
+diff -uNr 04_safe_globals/tests/boot_test_string.rb 05_drivers_gpio_uart/tests/boot_test_string.rb
+--- 04_safe_globals/tests/boot_test_string.rb
++++ 05_drivers_gpio_uart/tests/boot_test_string.rb
+@@ -1,3 +1,3 @@
+ # frozen_string_literal: true
+
+-EXPECTED_PRINT = 'Stopping here'
++EXPECTED_PRINT = 'Echoing input now'
 
 ```

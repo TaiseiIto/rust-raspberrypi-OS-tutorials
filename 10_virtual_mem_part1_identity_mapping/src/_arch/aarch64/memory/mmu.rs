@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Memory Management Unit Driver.
 //!
@@ -18,7 +18,8 @@ use crate::{
     memory::mmu::{translation_table::KernelTranslationTable, TranslationGranule},
 };
 use core::intrinsics::unlikely;
-use cortex_a::{barrier, regs::*};
+use cortex_a::{asm::barrier, registers::*};
+use tock_registers::interfaces::{ReadWriteable, Readable, Writeable};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions
@@ -173,7 +174,7 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
         // populate_tt_entries()でlvl2,lvl3の全entryを初期化
         KERNEL_TABLES
             .populate_tt_entries()
-            .map_err(|e| MMUEnableError::Other(e))?; // 失敗したときだけeをMMUEnableError::Other(e)にする
+            .map_err(MMUEnableError::Other)?;
 
         // Set the "Translation Table Base Register".
         // x86のCR3的なやつを設定

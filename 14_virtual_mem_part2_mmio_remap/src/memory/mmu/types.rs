@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! Memory Management Unit types.
 
@@ -8,34 +8,31 @@
 
 use crate::{
     bsp, common,
-    memory::{Address, AddressType, Physical, Virtual},
+    memory::{Address, AddressType, Physical},
 };
-use core::{convert::From, marker::PhantomData};
+use core::{convert::From, iter::Step, num::NonZeroUsize, ops::Range};
 
 //--------------------------------------------------------------------------------------------------
 // Public Definitions
 //--------------------------------------------------------------------------------------------------
 
-/// Generic page type.
-/// ページを表す構造体
-#[repr(C)]
-pub struct Page<ATYPE: AddressType> {
-    inner: [u8; bsp::memory::mmu::KernelGranule::SIZE],
-    _address_type: PhantomData<ATYPE>,
+/// A wrapper type around [Address] that ensures page alignment.
+#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
+pub struct PageAddress<ATYPE: AddressType> {
+    inner: Address<ATYPE>,
 }
 
-/// Type describing a slice of pages.
-/// ページの塊を表す構造体
-#[derive(Copy, Clone, PartialOrd, PartialEq)]
-pub struct PageSliceDescriptor<ATYPE: AddressType> {
-    start: Address<ATYPE>,
-    num_pages: usize,
+/// A type that describes a region of memory in quantities of pages.
+#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
+pub struct MemoryRegion<ATYPE: AddressType> {
+    start: PageAddress<ATYPE>,
+    end_exclusive: PageAddress<ATYPE>,
 }
 
 /// Architecture agnostic memory attributes.
 /// メモリ属性を表す列挙体(Cacheable領域とDevice領域)
 #[allow(missing_docs)]
-#[derive(Copy, Clone, PartialOrd, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub enum MemAttributes {
     CacheableDRAM,
     Device,
@@ -44,7 +41,7 @@ pub enum MemAttributes {
 /// Architecture agnostic access permissions.
 /// メモリ属性を表す列挙体(ReadOnlyとReadWrite)
 #[allow(missing_docs)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub enum AccessPermissions {
     ReadOnly,
     ReadWrite,
@@ -53,7 +50,7 @@ pub enum AccessPermissions {
 /// Collection of memory attributes.
 /// メモリ属性
 #[allow(missing_docs)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub struct AttributeFields {
     // Cacheable領域かDevice領域か
     pub mem_attributes: MemAttributes,
@@ -68,7 +65,7 @@ pub struct AttributeFields {
 #[derive(Copy, Clone)]
 pub struct MMIODescriptor {
     start_addr: Address<Physical>,
-    size: usize,
+    end_addr_exclusive: Address<Physical>,
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -76,115 +73,202 @@ pub struct MMIODescriptor {
 //--------------------------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
-// Page
+// PageAddress
 //------------------------------------------------------------------------------
-
-// Page構造体の実装
-impl<ATYPE: AddressType> Page<ATYPE> {
-    /// Get a pointer to the instance.
-    pub const fn as_ptr(&self) -> *const Page<ATYPE> {
-        // 自身へのポインタ
-        self as *const _
-    }
-}
-
-//------------------------------------------------------------------------------
-// PageSliceDescriptor
-//------------------------------------------------------------------------------
-
-// Pageの塊を表すPageSliceDescriptor構造体の実装
-impl<ATYPE: AddressType> PageSliceDescriptor<ATYPE> {
-    /// Create an instance.
-    pub const fn from_addr(start: Address<ATYPE>, num_pages: usize) -> Self {
-        // 開始アドレスがページの境界になっていることを確認
-        assert!(common::is_aligned(
-            start.into_usize(),
-            bsp::memory::mmu::KernelGranule::SIZE
-        ));
-        // 無ではないことを確認
-        assert!(num_pages > 0);
-
-        Self { start, num_pages }
+impl<ATYPE: AddressType> PageAddress<ATYPE> {
+    /// Unwraps the value.
+    pub fn into_inner(self) -> Address<ATYPE> {
+        self.inner
     }
 
-    /// Return a pointer to the first page of the described slice.
-    const fn first_page_ptr(&self) -> *const Page<ATYPE> {
-        // 自身の先頭ページへのポインタを返す
-        self.start.into_usize() as *const _
-    }
-
-    /// Return the number of Pages the slice describes.
-    pub const fn num_pages(&self) -> usize {
-        // 自身のページ数を返す
-        self.num_pages
-    }
-
-    /// Return the memory size this descriptor spans.
-    pub const fn size(&self) -> usize {
-        // 自身の大きさを返す
-        self.num_pages * bsp::memory::mmu::KernelGranule::SIZE
-    }
-
-    /// Return the start address.
-    pub const fn start_addr(&self) -> Address<ATYPE> {
-        // 自身の先頭アドレスを返す
-        self.start
-    }
-
-    /// Return the exclusive end address.
-    pub fn end_addr(&self) -> Address<ATYPE> {
-        // 自身の終了アドレス(自身に含まれる最後のアドレスの次のアドレス)を返す
-        self.start + self.size()
-    }
-
-    /// Return the inclusive end address.
-    pub fn end_addr_inclusive(&self) -> Address<ATYPE> {
-        // 自身の終了アドレス(自身に含まれる最後のアドレス)を返す
-        self.start + (self.size() - 1)
-    }
-
-    /// Check if an address is contained within this descriptor.
-    pub fn contains(&self, addr: Address<ATYPE>) -> bool {
-        // addrが自身の内部にあるかどうかの真理値
-        (addr >= self.start_addr()) && (addr <= self.end_addr_inclusive())
-    }
-
-    /// Return a non-mutable slice of Pages.
-    /// 変更不能なPageの塊を返す
-    /// # Safety
+    /// Calculates the offset from the page address.
     ///
-    /// - Same as applies for `core::slice::from_raw_parts`.
-    pub unsafe fn as_slice(&self) -> &[Page<ATYPE>] {
-        core::slice::from_raw_parts(self.first_page_ptr(), self.num_pages)
+    /// `count` is in units of [PageAddress]. For example, a count of 2 means `result = self + 2 *
+    /// page_size`.
+    pub fn checked_offset(self, count: isize) -> Option<Self> {
+        if count == 0 {
+            return Some(self);
+        }
+
+        let delta = (count.abs() as usize).checked_mul(bsp::memory::mmu::KernelGranule::SIZE)?;
+        let result = if count.is_positive() {
+            self.inner.as_usize().checked_add(delta)?
+        } else {
+            self.inner.as_usize().checked_sub(delta)?
+        };
+
+        Some(Self {
+            inner: Address::new(result),
+        })
     }
 }
 
-impl From<PageSliceDescriptor<Virtual>> for PageSliceDescriptor<Physical> {
-    // 仮想addressのPageSliceから物理addressのPageSliceDescriptorを返す
-    fn from(desc: PageSliceDescriptor<Virtual>) -> Self {
+impl<ATYPE: AddressType> From<usize> for PageAddress<ATYPE> {
+    fn from(addr: usize) -> Self {
+        assert!(
+            common::is_aligned(addr, bsp::memory::mmu::KernelGranule::SIZE),
+            "Input usize not page aligned"
+        );
+
         Self {
-            start: Address::new(desc.start.into_usize()),
-            num_pages: desc.num_pages,
+            inner: Address::new(addr),
         }
     }
 }
 
-impl From<MMIODescriptor> for PageSliceDescriptor<Physical> {
-    // MMIODescriptorから物理addressのPageSliceDescriptorを返す
-    fn from(desc: MMIODescriptor) -> Self {
-        // MMIO領域のページの開始物理address
-        let start_page_addr = desc
-            .start_addr
-            .align_down(bsp::memory::mmu::KernelGranule::SIZE);
+impl<ATYPE: AddressType> From<Address<ATYPE>> for PageAddress<ATYPE> {
+    fn from(addr: Address<ATYPE>) -> Self {
+        assert!(addr.is_page_aligned(), "Input Address not page aligned");
 
-        // MMIO領域のPage数
-        let len = ((desc.end_addr_inclusive().into_usize() - start_page_addr.into_usize())
-            >> bsp::memory::mmu::KernelGranule::SHIFT)
-            + 1;
+        Self { inner: addr }
+    }
+}
+
+impl<ATYPE: AddressType> Step for PageAddress<ATYPE> {
+    fn steps_between(start: &Self, end: &Self) -> Option<usize> {
+        if start > end {
+            return None;
+        }
+
+        // Since start <= end, do unchecked arithmetic.
+        Some(
+            (end.inner.as_usize() - start.inner.as_usize())
+                >> bsp::memory::mmu::KernelGranule::SHIFT,
+        )
+    }
+
+    fn forward_checked(start: Self, count: usize) -> Option<Self> {
+        start.checked_offset(count as isize)
+    }
+
+    fn backward_checked(start: Self, count: usize) -> Option<Self> {
+        start.checked_offset(-(count as isize))
+    }
+}
+
+//------------------------------------------------------------------------------
+// MemoryRegion
+//------------------------------------------------------------------------------
+impl<ATYPE: AddressType> MemoryRegion<ATYPE> {
+    /// Create an instance.
+    pub fn new(start: PageAddress<ATYPE>, end_exclusive: PageAddress<ATYPE>) -> Self {
+        assert!(start <= end_exclusive);
 
         Self {
-            start: start_page_addr,
-            num_pages: len,
+            start,
+            end_exclusive,
+        }
+    }
+
+    fn as_range(&self) -> Range<PageAddress<ATYPE>> {
+        self.into_iter()
+    }
+
+    /// Returns the start page address.
+    pub fn start_page_addr(&self) -> PageAddress<ATYPE> {
+        self.start
+    }
+
+    /// Returns the start address.
+    pub fn start_addr(&self) -> Address<ATYPE> {
+        self.start.into_inner()
+    }
+
+    /// Returns the exclusive end page address.
+    pub fn end_exclusive_page_addr(&self) -> PageAddress<ATYPE> {
+        self.end_exclusive
+    }
+
+    /// Returns the exclusive end page address.
+    pub fn end_inclusive_page_addr(&self) -> PageAddress<ATYPE> {
+        self.end_exclusive.checked_offset(-1).unwrap()
+    }
+
+    /// Checks if self contains an address.
+    pub fn contains(&self, addr: Address<ATYPE>) -> bool {
+        let page_addr = PageAddress::from(addr.align_down_page());
+        self.as_range().contains(&page_addr)
+    }
+
+    /// Checks if there is an overlap with another memory region.
+    pub fn overlaps(&self, other_region: &Self) -> bool {
+        let self_range = self.as_range();
+
+        self_range.contains(&other_region.start_page_addr())
+            || self_range.contains(&other_region.end_inclusive_page_addr())
+    }
+
+    /// Returns the number of pages contained in this region.
+    pub fn num_pages(&self) -> usize {
+        PageAddress::steps_between(&self.start, &self.end_exclusive).unwrap()
+    }
+
+    /// Returns the size in bytes of this region.
+    pub fn size(&self) -> usize {
+        // Invariant: start <= end_exclusive, so do unchecked arithmetic.
+        let end_exclusive = self.end_exclusive.into_inner().as_usize();
+        let start = self.start.into_inner().as_usize();
+
+        end_exclusive - start
+    }
+
+    /// Splits the MemoryRegion like:
+    ///
+    /// --------------------------------------------------------------------------------
+    /// |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |
+    /// --------------------------------------------------------------------------------
+    ///   ^                               ^                                       ^
+    ///   |                               |                                       |
+    ///   left_start     left_end_exclusive                                       |
+    ///                                                                           |
+    ///                                   ^                                       |
+    ///                                   |                                       |
+    ///                                   right_start           right_end_exclusive
+    ///
+    /// Left region is returned to the caller. Right region is the new region for this struct.
+    pub fn take_first_n_pages(&mut self, num_pages: NonZeroUsize) -> Result<Self, &'static str> {
+        let count: usize = num_pages.into();
+
+        let left_end_exclusive = self.start.checked_offset(count as isize);
+        let left_end_exclusive = match left_end_exclusive {
+            None => return Err("Overflow while calculating left_end_exclusive"),
+            Some(x) => x,
+        };
+
+        if left_end_exclusive > self.end_exclusive {
+            return Err("Not enough free pages");
+        }
+
+        let allocation = Self {
+            start: self.start,
+            end_exclusive: left_end_exclusive,
+        };
+        self.start = left_end_exclusive;
+
+        Ok(allocation)
+    }
+}
+
+impl<ATYPE: AddressType> IntoIterator for MemoryRegion<ATYPE> {
+    type Item = PageAddress<ATYPE>;
+    type IntoIter = Range<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Range {
+            start: self.start,
+            end: self.end_exclusive,
+        }
+    }
+}
+
+impl From<MMIODescriptor> for MemoryRegion<Physical> {
+    fn from(desc: MMIODescriptor) -> Self {
+        let start = PageAddress::from(desc.start_addr.align_down_page());
+        let end_exclusive = PageAddress::from(desc.end_addr_exclusive().align_up_page());
+
+        Self {
+            start,
+            end_exclusive,
         }
     }
 }
@@ -199,8 +283,12 @@ impl MMIODescriptor {
     /// 開始物理addressと大きさからMMIODescriptorを作成
     pub const fn new(start_addr: Address<Physical>, size: usize) -> Self {
         assert!(size > 0);
+        let end_addr_exclusive = Address::new(start_addr.as_usize() + size);
 
-        Self { start_addr, size }
+        Self {
+            start_addr,
+            end_addr_exclusive,
+        }
     }
 
     /// Return the start address.
@@ -209,16 +297,9 @@ impl MMIODescriptor {
         self.start_addr
     }
 
-    /// Return the inclusive end address.
-    /// MMIO領域内の一番最後の物理address
-    pub fn end_addr_inclusive(&self) -> Address<Physical> {
-        self.start_addr + (self.size - 1)
-    }
-
-    /// Return the size.
-    /// MMIO領域の大きさ(bytes)
-    pub const fn size(&self) -> usize {
-        self.size
+    /// Return the exclusive end address.
+    pub fn end_addr_exclusive(&self) -> Address<Physical> {
+        self.end_addr_exclusive
     }
 }
 
@@ -229,15 +310,76 @@ impl MMIODescriptor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory::Virtual;
     use test_macros::kernel_test;
 
-    /// Check if the size of `struct Page` is as expected.
-    /// ページの大きさが正しいことを確認
+    /// Sanity of [PageAddress] methods.
     #[kernel_test]
-    fn size_of_page_equals_granule_size() {
+    fn pageaddress_type_method_sanity() {
+        let page_addr: PageAddress<Virtual> =
+            PageAddress::from(bsp::memory::mmu::KernelGranule::SIZE * 2);
+
         assert_eq!(
-            core::mem::size_of::<Page<Physical>>(),
-            bsp::memory::mmu::KernelGranule::SIZE
+            page_addr.checked_offset(-2),
+            Some(PageAddress::<Virtual>::from(0))
         );
+
+        assert_eq!(
+            page_addr.checked_offset(2),
+            Some(PageAddress::<Virtual>::from(
+                bsp::memory::mmu::KernelGranule::SIZE * 4
+            ))
+        );
+
+        assert_eq!(
+            PageAddress::<Virtual>::from(0).checked_offset(0),
+            Some(PageAddress::<Virtual>::from(0))
+        );
+        assert_eq!(PageAddress::<Virtual>::from(0).checked_offset(-1), None);
+
+        let max_page_addr = Address::<Virtual>::new(usize::MAX).align_down_page();
+        assert_eq!(
+            PageAddress::<Virtual>::from(max_page_addr).checked_offset(1),
+            None
+        );
+
+        let zero = PageAddress::<Virtual>::from(0);
+        let three = PageAddress::<Virtual>::from(bsp::memory::mmu::KernelGranule::SIZE * 3);
+        assert_eq!(PageAddress::steps_between(&zero, &three), Some(3));
+    }
+
+    /// Sanity of [MemoryRegion] methods.
+    #[kernel_test]
+    fn memoryregion_type_method_sanity() {
+        let zero = PageAddress::<Virtual>::from(0);
+        let zero_region = MemoryRegion::new(zero, zero);
+        assert_eq!(zero_region.num_pages(), 0);
+        assert_eq!(zero_region.size(), 0);
+
+        let one = PageAddress::<Virtual>::from(bsp::memory::mmu::KernelGranule::SIZE);
+        let one_region = MemoryRegion::new(zero, one);
+        assert_eq!(one_region.num_pages(), 1);
+        assert_eq!(one_region.size(), bsp::memory::mmu::KernelGranule::SIZE);
+
+        let three = PageAddress::<Virtual>::from(bsp::memory::mmu::KernelGranule::SIZE * 3);
+        let mut three_region = MemoryRegion::new(zero, three);
+        assert!(three_region.contains(zero.into_inner()));
+        assert!(!three_region.contains(three.into_inner()));
+        assert!(three_region.overlaps(&one_region));
+
+        let allocation = three_region
+            .take_first_n_pages(NonZeroUsize::new(2).unwrap())
+            .unwrap();
+        assert_eq!(allocation.num_pages(), 2);
+        assert_eq!(three_region.num_pages(), 1);
+
+        let mut count = 0;
+        for i in allocation.into_iter() {
+            assert_eq!(
+                i.into_inner().as_usize(),
+                count * bsp::memory::mmu::KernelGranule::SIZE
+            );
+            count = count + 1;
+        }
     }
 }

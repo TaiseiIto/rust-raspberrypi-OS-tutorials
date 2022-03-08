@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 // Rust embedded logo for `make doc`.
 #![doc(html_logo_url = "https://git.io/JeGIp")]
@@ -26,6 +26,7 @@ unsafe fn kernel_init() -> ! {
     use driver::interface::DriverManager;
 
     exception::handling_init();
+    memory::mmu::post_enable_init();
 
     // Add the mapping records for the precomputed entries first, so that they appear on the top of
     // the list.

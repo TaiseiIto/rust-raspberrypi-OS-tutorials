@@ -2,11 +2,18 @@
 
 # SPDX-License-Identifier: MIT OR Apache-2.0
 #
-# Copyright (c) 2019-2021 Andre Richter <andre.o.richter@gmail.com>
+# Copyright (c) 2019-2022 Andre Richter <andre.o.richter@gmail.com>
 
 require 'expect'
 
 TIMEOUT_SECS = 3
+
+# Error class for when expect times out.
+class ExpectTimeoutError < StandardError
+    def initialize
+        super('Timeout while expecting string')
+    end
+end
 
 # Verify sending and receiving works as expected.
 class TxRxHandshake
@@ -16,7 +23,7 @@ class TxRxHandshake
 
     def run(qemu_out, qemu_in)
         qemu_in.write_nonblock('ABC')
-        raise('TX/RX test failed') if qemu_out.expect('OK1234', TIMEOUT_SECS).nil?
+        raise ExpectTimeoutError if qemu_out.expect('OK1234', TIMEOUT_SECS).nil?
     end
 end
 
@@ -27,7 +34,7 @@ class TxStatistics
     end
 
     def run(qemu_out, _qemu_in)
-        raise('chars_written reported wrong') if qemu_out.expect('6', TIMEOUT_SECS).nil?
+        raise ExpectTimeoutError if qemu_out.expect('6', TIMEOUT_SECS).nil?
     end
 end
 
@@ -38,7 +45,7 @@ class RxStatistics
     end
 
     def run(qemu_out, _qemu_in)
-        raise('chars_read reported wrong') if qemu_out.expect('3', TIMEOUT_SECS).nil?
+        raise ExpectTimeoutError if qemu_out.expect('3', TIMEOUT_SECS).nil?
     end
 end
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
-// Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
+// Copyright (c) 2018-2022 Andre Richter <andre.o.richter@gmail.com>
 
 //! GPIO Driver.
 
@@ -8,7 +8,11 @@ use crate::{
     bsp::device_driver::common::MMIODerefWrapper, driver, synchronization,
     synchronization::IRQSafeNullLock,
 };
-use register::{mmio::*, register_bitfields, register_structs};
+use tock_registers::{
+    interfaces::{ReadWriteable, Writeable},
+    register_bitfields, register_structs,
+    registers::ReadWrite,
+};
 
 //--------------------------------------------------------------------------------------------------
 // Private Definitions

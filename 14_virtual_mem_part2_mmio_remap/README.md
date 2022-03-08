@@ -8,14 +8,14 @@
   whole of the board's address space.
 - Instead, only ranges that are actually needed are mapped:
     - The `kernel binary` stays `identity mapped` for now.
-    - Device `MMIO regions` are remapped lazily to a special virtual address region at the top of
-      the virtual address space during the device driver's `init()`.
+    - Device `MMIO regions` are remapped lazily (to a special reserved virtual address region)
+      during the device driver's `init()`.
 
-- `kernel`‹óŠÔ‚Æ`user`‹óŠÔ‚ğ•ª—£‚·‚é‚½‚ß‚É‚¢‚Â‚©•K—v‚É‚È‚é•ÏX‚ÌÅ‰‚ÌW‡‚ğ“±“ü‚·‚éD
-- Šî”Õ‚Ìaddress‹óŠÔ‘S‘Ì‚ÌP“™Ê‘œ‚ğ”p~‚·‚é‚½‚ß‚Émemory mappingí—ª‚Í‚æ‚è‚“x‚È‚à‚Ì‚É‚È‚éD
-- ‚»‚Ì‘ã‚í‚èCmap‚³‚ê‚é•K—v‚ª‚ ‚é”ÍˆÍ‚¾‚¯:
-    - `kernel binary`‚Í¡‚Ì‚Æ‚±‚ëP“™Ê‘œ‚Ì‚Ü‚Ü
-    - Device `MMIO regions`‚Ídevice driver‚Ì`init()`‚Å“Á•Ê‚È‰¼‘zaddress”ÍˆÍ‚Éremap‚³‚ê‚éD
+- `kernel`ï¿½ï¿½Ô‚ï¿½`user`ï¿½ï¿½Ô‚ğ•ª—ï¿½ï¿½ï¿½ï¿½é‚½ï¿½ß‚É‚ï¿½ï¿½Â‚ï¿½ï¿½Kï¿½vï¿½É‚È‚ï¿½ÏXï¿½ÌÅï¿½ï¿½ÌWï¿½ï¿½ï¿½ğ“±“ï¿½ï¿½ï¿½ï¿½ï¿½D
+- ï¿½ï¿½Õ‚ï¿½addressï¿½ï¿½Ô‘Sï¿½Ì‚ÌPï¿½ï¿½ï¿½Ê‘ï¿½ï¿½ï¿½pï¿½~ï¿½ï¿½ï¿½é‚½ï¿½ß‚ï¿½memory mappingï¿½í—ªï¿½Í‚ï¿½è‚ï¿½xï¿½È‚ï¿½ï¿½Ì‚É‚È‚ï¿½D
+- ï¿½ï¿½ï¿½Ì‘ï¿½ï¿½ï¿½Cmapï¿½ï¿½ï¿½ï¿½ï¿½Kï¿½vï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÍˆÍ‚ï¿½ï¿½ï¿½:
+    - `kernel binary`ï¿½Íï¿½ï¿½Ì‚Æ‚ï¿½ï¿½ï¿½Pï¿½ï¿½ï¿½Ê‘ï¿½ï¿½Ì‚Ü‚ï¿½
+    - Device `MMIO regions`ï¿½ï¿½device driverï¿½ï¿½`init()`ï¿½Å“ï¿½ï¿½Ê‚È‰ï¿½ï¿½zaddressï¿½ÍˆÍ‚ï¿½remapï¿½ï¿½ï¿½ï¿½ï¿½D
 
 ## Table of Contents
 
@@ -23,6 +23,7 @@
 - [Implementation](#implementation)
   - [A New Mapping API in `src/memory/mmu.rs`](#a-new-mapping-api-in-srcmemorymmutranslationtablers)
   - [The new APIs in action](#the-new-apis-in-action)
+  - [MMIO Virtual Address Allocation](#mmio-virtual-address-allocation)
   - [Supporting Changes](#supporting-changes)
 - [Test it](#test-it)
 - [Diff to previous](#diff-to-previous)
@@ -32,7 +33,7 @@
 This tutorial is a first step of many needed for enabling `userspace applications` (which we
 hopefully will have some day in the very distant future).
 
-¡‰ñ‚Ìtutorial‚Í(‰“‚¢«—ˆÀŒ»‚·‚é‚Å‚ ‚ë‚¤)`userspace applications`‚ğ—LŒø‚É‚·‚é‚½‚ß‚É•K—v‚ÈÅ‰‚Ì’iŠK‚¾D
+ï¿½ï¿½ï¿½ï¿½ï¿½tutorialï¿½ï¿½(ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å‚ï¿½ï¿½ë‚¤)`userspace applications`ï¿½ï¿½Lï¿½ï¿½ï¿½É‚ï¿½ï¿½é‚½ï¿½ß‚É•Kï¿½vï¿½ÈÅï¿½ï¿½Ì’iï¿½Kï¿½ï¿½ï¿½D
 
 For this, one of the features we want is a clean separation of `kernel` and `user` address spaces.
 Fortunately, `ARMv8` has convenient architecture support to realize this. The following text and
@@ -40,10 +41,10 @@ pictue gives some more motivation and technical information. It is quoted from t
 Series Programmer's Guide for ARMv8-A], Chapter 12.2, Separation of kernel and application Virtual
 Address spaces_:
 
-‚±‚Ì‚½‚ßC‰äX‚ª‹‚ß‚é‹@”\‚Ì‚Ğ‚Æ‚Â‚Í`kernel`‹óŠÔ‚Æ`user`‹óŠÔ‚ÌŠ®‘S‚È•ªŠ„‚¾D
-K‚¢C`ARMv8`‚Í‚±‚ê‚ğÀŒ»‚·‚é‚½‚ß‚Ì•Ö—˜‚Èarchitecturex‰‡‚ğ‚Á‚Ä‚¢‚éD
-ˆÈ‰º‚Ì•¶‚Æ}‚©‚ç‚³‚ç‚È‚é—˜“_‚Æ‹Zpî•ñ‚ª“¾‚ç‚ê‚éD
-_[ARM Cortex-A Series Programmer's Guide for ARMv8-A], Chapter 12.2, Separation of kernel and application Virtual Address spaces_ ‚©‚ç‚Ìˆø—p:
+ï¿½ï¿½ï¿½Ì‚ï¿½ï¿½ßCï¿½ï¿½Xï¿½ï¿½ï¿½ï¿½ï¿½ß‚ï¿½@ï¿½\ï¿½Ì‚Ğ‚Æ‚Â‚ï¿½`kernel`ï¿½ï¿½Ô‚ï¿½`user`ï¿½ï¿½Ô‚ÌŠï¿½ï¿½Sï¿½È•ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½D
+ï¿½Kï¿½ï¿½ï¿½C`ARMv8`ï¿½Í‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½é‚½ï¿½ß‚Ì•Ö—ï¿½ï¿½ï¿½architectureï¿½xï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½D
+ï¿½È‰ï¿½ï¿½Ì•ï¿½ï¿½Æ}ï¿½ï¿½ï¿½ç‚³ï¿½ï¿½È‚é—˜ï¿½_ï¿½Æ‹Zï¿½pï¿½ï¿½ñ‚ª“ï¿½ï¿½ï¿½ï¿½ï¿½D
+_[ARM Cortex-A Series Programmer's Guide for ARMv8-A], Chapter 12.2, Separation of kernel and application Virtual Address spaces_ ï¿½ï¿½ï¿½ï¿½Ìˆï¿½ï¿½p:
 
 > Operating systems typically have a number of applications or tasks running concurrently. Each of
 > these has its own unique set of translation tables and the kernel switches from one to another as
@@ -60,16 +61,16 @@ _[ARM Cortex-A Series Programmer's Guide for ARMv8-A], Chapter 12.2, Separation 
 > the Virtual Address space associated with each application mapped to the least significant area of
 > memory. However, both of these are mapped to a much smaller Physical Address space.
 
-> OS‚Íˆê”Ê‚É“¯‚É•¡”‚Ìapplications‚¨‚æ‚Ñtasks‚ğ‘–‚ç‚¹‚éD
-> ‚±‚ê‚ç‚Í‚»‚ê‚¼‚ê‚ª“Æ©‚Ìtranslation tables‚ÆC‚ ‚étask‚©‚ç•Ê‚Ìtask‚Ö‚Ìswitching context‚Ìˆ—‚Ìˆê•”‚Æ‚µ‚Äkernel switches‚ğ‚ÂD
-> ‚µ‚©‚µCmemory system‚Ì‘å•”•ª‚Íkernel‚Ì‚İ‚Ég‚í‚êC‰¼‘zaddress‚©‚ç‹H‚É•ÏX‚³‚ê‚étranslation table entries‚ÅŠ„‚è“–‚Ä‚ç‚ê‚½•¨—address‚É’¼‚³‚ê‚éD
-> ARMv8 architecture‚Í‚±‚Ì—v‹‚ğŒø—¦“I‚Éˆµ‚¤‚¢‚­‚Â‚©‚Ì‹@”\‚ğ’ñ‹Ÿ‚·‚éD
+> OSï¿½Íˆï¿½Ê‚É“ï¿½ï¿½ï¿½ï¿½É•ï¿½ï¿½ï¿½ï¿½ï¿½applicationsï¿½ï¿½ï¿½ï¿½ï¿½tasksï¿½ğ‘–‚ç‚¹ï¿½ï¿½D
+> ï¿½ï¿½ï¿½ï¿½ï¿½Í‚ï¿½ï¿½ê‚¼ï¿½ê‚ªï¿½Æï¿½ï¿½ï¿½translation tablesï¿½ÆCï¿½ï¿½ï¿½ï¿½taskï¿½ï¿½ï¿½ï¿½Ê‚ï¿½taskï¿½Ö‚ï¿½switching contextï¿½Ìï¿½ï¿½ï¿½ï¿½Ìˆê•”ï¿½Æ‚ï¿½ï¿½ï¿½kernel switchesï¿½ï¿½ï¿½ï¿½ï¿½ÂD
+> ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Cmemory systemï¿½Ì‘å•”ï¿½ï¿½ï¿½ï¿½kernelï¿½Ì‚İ‚Égï¿½ï¿½ï¿½Cï¿½ï¿½ï¿½zaddressï¿½ï¿½ï¿½ï¿½Hï¿½É•ÏXï¿½ï¿½ï¿½ï¿½ï¿½translation table entriesï¿½ÅŠï¿½ï¿½è“–ï¿½Ä‚ï¿½ê‚½ï¿½ï¿½ï¿½ï¿½addressï¿½É’ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½D
+> ARMv8 architectureï¿½Í‚ï¿½ï¿½Ì—vï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Iï¿½Éˆï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â‚ï¿½ï¿½Ì‹@ï¿½\ï¿½ï¿½ñ‹Ÿ‚ï¿½ï¿½ï¿½D
 >
-> Table base address‚ÍTranslation Table Base Registers `TTBR0_EL1` ‚Æ `TTBR1_EL1` ‚Å¯•Ê‚³‚ê‚éD
-> `TTBR0` ‚ªw‚µ¦‚· translation table ‚Í VA ‚Ì upper bits ‚ª‘S‚Ä0‚Ì‚É‘I‚Î‚ê‚éD
-> `TTBR1` ‚Í VA ‚Ì upper bits ‚ª‘S‚Ä1‚Ì‚É‘I‚Î‚ê‚éD[...]
+> Table base addressï¿½ï¿½Translation Table Base Registers `TTBR0_EL1` ï¿½ï¿½ `TTBR1_EL1` ï¿½Åï¿½ï¿½Ê‚ï¿½ï¿½ï¿½ï¿½D
+> `TTBR0` ï¿½ï¿½ï¿½wï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ translation table ï¿½ï¿½ VA ï¿½ï¿½ upper bits ï¿½ï¿½ï¿½Sï¿½ï¿½0ï¿½Ìï¿½ï¿½É‘Iï¿½Î‚ï¿½ï¿½D
+> `TTBR1` ï¿½ï¿½ VA ï¿½ï¿½ upper bits ï¿½ï¿½ï¿½Sï¿½ï¿½1ï¿½Ìï¿½ï¿½É‘Iï¿½Î‚ï¿½ï¿½D[...]
 >
-> }12-4‚Íkernel‹óŠÔ‚ªmemory‚ÌÅ‚àaddress‚Ì‘å‚«‚È—Ìˆæ‚Émap‚³‚êCŠeapplication‚ÉŠÖ˜A•t‚¯‚ç‚ê‚½‰¼‘zaddress‹óŠÔ‚ªmemory‚Ìaddress‚Ì¬‚³‚È—Ìˆæ‚Émap‚³‚ê‚é‚±‚Æ‚ğ¦‚·D
+> ï¿½}12-4ï¿½ï¿½kernelï¿½ï¿½Ô‚ï¿½memoryï¿½ÌÅ‚ï¿½addressï¿½Ì‘å‚«ï¿½È—Ìˆï¿½ï¿½mapï¿½ï¿½ï¿½ï¿½Cï¿½eapplicationï¿½ÉŠÖ˜Aï¿½tï¿½ï¿½ï¿½ï¿½ê‚½ï¿½ï¿½ï¿½zaddressï¿½ï¿½Ô‚ï¿½memoryï¿½ï¿½addressï¿½Ìï¿½ï¿½ï¿½ï¿½È—Ìˆï¿½ï¿½mapï¿½ï¿½ï¿½ï¿½é‚±ï¿½Æ‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½D
 
 <p align="center">
     <img src="../doc/15_kernel_user_address_space_partitioning.png" height="500" align="center">
@@ -78,28 +79,25 @@ _[ARM Cortex-A Series Programmer's Guide for ARMv8-A], Chapter 12.2, Separation 
 This approach is also sometimes called a "[higher half kernel]". To eventually achieve this
 separation, this tutorial makes a start by changing the following things:
 
-‚±‚Ì‚â‚è•û‚Í"[higher half kernel]"‚ÆŒÄ‚Î‚ê‚éD
-‚¢‚¸‚ê‚±‚Ì•ª—£‚ğ’B¬‚·‚é‚½‚ßC‚±‚Ìtutorial‚Íèn‚ß‚ÉˆÈ‰º‚Ì•ÏX‚ğs‚¤D
+ï¿½ï¿½ï¿½Ì‚ï¿½ï¿½ï¿½ï¿½ï¿½"[higher half kernel]"ï¿½ÆŒÄ‚Î‚ï¿½ï¿½D
+ï¿½ï¿½ï¿½ï¿½ï¿½ê‚±ï¿½Ì•ï¿½ï¿½ï¿½ï¿½ï¿½Bï¿½ï¿½ï¿½ï¿½ï¿½é‚½ï¿½ßCï¿½ï¿½ï¿½ï¿½tutorialï¿½Íï¿½nï¿½ß‚ÉˆÈ‰ï¿½ï¿½Ì•ÏXï¿½ï¿½ï¿½sï¿½ï¿½ï¿½D
 
 1. Instead of bulk-`identity mapping` the whole of the board's address space, only the particular
    parts that are needed will be mapped.
-1. For now, the `kernel binary` stays identity mapped. This will be changed in the in the coming
-   tutorials as it is a quite difficult and peculiar exercise to remap the kernel.
-1. Device `MMIO regions` are lazily remapped during the device driver's `init()`.
-   1. The remappings will populate the top of the virtual address space. In the `AArch64 MMU
-      Driver`, we provide the top `256 MiB` for it.
-   1. It is possible to define the size of the virtual address space at compile time. We chose `8
-      GiB` for now, which means remapped MMIO virtual addresses will start at `7936 MiB`
-      (`0x1_f000_0000`).
+1. For now, the `kernel binary` stays identity mapped. This will be changed in the coming tutorials
+   as it is a quite difficult and peculiar exercise to remap the kernel.
+1. Device `MMIO regions` are lazily remapped during a device driver's `init()`.
+   1. A dedicated region of virtual addresses that we reserve using `BSP` code and the `linker
+      script` is used for this.
 1. We keep using `TTBR0` for the kernel translation tables for now. This will be changed when we
    remap the `kernel binary` in the coming tutorials.
 
-1. Šî”Õ‚Ìaddress‹óŠÔ‘S‘Ì‚ğP“™Ê‘œ‚·‚é‘ã‚í‚è‚É•K—v‚È•”•ª‚¾‚¯‚ğmap‚·‚éD
-1. ¡‚Ì‚Æ‚±‚ëC`kernel binary`‚ÍP“™Ê‘œ‚Ì‚Ü‚Ü‚¾Dkernel‚Ìremap‚Í‚Æ‚Ä‚à“ï‚µ‚­Šï–­‚È‰Û‘è‚Å‚ ‚é‚½‚ß¡Œã‚Ìtutorials‚Å•ÏX‚³‚ê‚é‚¾‚ë‚¤D
-1. Device `MMIO regions`‚Ídevice driver‚Ì`init()`‚ÌŠÔ‚ä‚Á‚­‚è‚Æremap‚³‚ê‚éD
-    1. ‚±‚Ìremap‚Í‰¼‘zaddress‹óŠÔ‚Ìæ“ª‚É”z’u‚³‚ê‚éD`AArch64 MMU Drive`‚É‚¨‚¢‚Äæ“ª`256 MiB`‚ğ‚±‚Ì‚½‚ß‚ÉŠ„‚è“–‚Ä‚éD
-    1. compile‚É‰¼‘zaddress‹óŠÔ‚Ì‘å‚«‚³‚ª’è‹`‰Â”\‚¾Dremap‚³‚ê‚½MMIO‚Ì‰¼‘zaddress‚ª`7936 MiB` (`0x1_f000_0000`) ‚©‚çn‚Ü‚é‚æ‚¤‚É‚Æ‚è‚ ‚¦‚¸`8 GiB`‚Æ‚·‚éD
-1. ¡‚Ì‚Æ‚±‚ë`TTBR0`‚ğkernel translation tables‚Æ‚µ‚Äg‚¢‘±‚¯‚éD¡Œã‚Ìtutorials‚Å`kernel binary`‚ğremap‚·‚éÛ‚É•ÏX‚³‚ê‚é‚¾‚ë‚¤D
+1. ï¿½ï¿½Õ‚ï¿½addressï¿½ï¿½Ô‘Sï¿½Ì‚ï¿½ï¿½Pï¿½ï¿½ï¿½Ê‘ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É•Kï¿½vï¿½È•ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½mapï¿½ï¿½ï¿½ï¿½D
+1. ï¿½ï¿½ï¿½Ì‚Æ‚ï¿½ï¿½ï¿½C`kernel binary`ï¿½ÍPï¿½ï¿½ï¿½Ê‘ï¿½ï¿½Ì‚Ü‚Ü‚ï¿½ï¿½Dkernelï¿½ï¿½remapï¿½Í‚Æ‚Ä‚ï¿½ï¿½ï‚µï¿½ï¿½ï¿½ï–­ï¿½È‰Û‘ï¿½Å‚ï¿½ï¿½é‚½ï¿½ßï¿½ï¿½ï¿½ï¿½tutorialsï¿½Å•ÏXï¿½ï¿½ï¿½ï¿½é‚¾ï¿½ë‚¤ï¿½D
+1. Device `MMIO regions`ï¿½ï¿½device driverï¿½ï¿½`init()`ï¿½ÌŠÔ‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½remapï¿½ï¿½ï¿½ï¿½ï¿½D
+    1. ï¿½ï¿½ï¿½ï¿½remapï¿½Í‰ï¿½ï¿½zaddressï¿½ï¿½Ô‚Ìæ“ªï¿½É”zï¿½uï¿½ï¿½ï¿½ï¿½ï¿½D`AArch64 MMU Drive`ï¿½É‚ï¿½ï¿½ï¿½ï¿½Äæ“ª`256 MiB`ï¿½ï¿½ï¿½ï¿½ï¿½Ì‚ï¿½ï¿½ß‚ÉŠï¿½ï¿½è“–ï¿½Ä‚ï¿½D
+    1. compileï¿½ï¿½ï¿½É‰ï¿½ï¿½zaddressï¿½ï¿½Ô‚Ì‘å‚«ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½`ï¿½Â”\ï¿½ï¿½ï¿½Dremapï¿½ï¿½ï¿½ê‚½MMIOï¿½Ì‰ï¿½ï¿½zaddressï¿½ï¿½`7936 MiB` (`0x1_f000_0000`) ï¿½ï¿½ï¿½ï¿½nï¿½Ü‚ï¿½æ‚¤ï¿½É‚Æ‚è‚ ï¿½ï¿½ï¿½ï¿½`8 GiB`ï¿½Æ‚ï¿½ï¿½ï¿½D
+1. ï¿½ï¿½ï¿½Ì‚Æ‚ï¿½ï¿½ï¿½`TTBR0`ï¿½ï¿½kernel translation tablesï¿½Æ‚ï¿½ï¿½Ägï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Dï¿½ï¿½ï¿½ï¿½ï¿½tutorialsï¿½ï¿½`kernel binary`ï¿½ï¿½remapï¿½ï¿½ï¿½ï¿½Û‚É•ÏXï¿½ï¿½ï¿½ï¿½é‚¾ï¿½ë‚¤ï¿½D
 
 [ARM Cortex-A Series Programmer's Guide for ARMv8-A]: https://developer.arm.com/documentation/den0024/latest/
 [higher half kernel]: https://wiki.osdev.org/Higher_Half_Kernel
@@ -111,55 +109,51 @@ Until now, the whole address space of the board was identity mapped at once. The
 together directly while setting up the translation tables, without any indirection through **generic
 kernel code** (`src/memory/**`).
 
-¡‚Ü‚ÅCŠî”Õ‚Ìaddress‹óŠÔ‘S‘Ì‚ÍP“™Ê‘œ‚³‚ê‚½D
-kernel‚Ì **architecture** (`src/_arch/_/memory/**`) ‚Ì•”•ª‚Æ **bsp** (`src/bsp/_/memory/**`) ‚Ì•”•ª‚Ítranslation tables‚ğİ’è‚·‚éŠÔ **generic kernel code** (`src/memory/**`) ‚ğ’Ê‚µ‚ÄŠÔÚQÆ‚·‚é‚±‚Æ‚È‚­C‹¤‚É’¼Ú“®ì‚µ‚Ä‚¢‚½D
+ï¿½ï¿½ï¿½Ü‚ÅCï¿½ï¿½Õ‚ï¿½addressï¿½ï¿½Ô‘Sï¿½Ì‚ÍPï¿½ï¿½ï¿½Ê‘ï¿½ï¿½ï¿½ï¿½ê‚½ï¿½D
+kernelï¿½ï¿½ **architecture** (`src/_arch/_/memory/**`) ï¿½Ì•ï¿½ï¿½ï¿½ï¿½ï¿½ **bsp** (`src/bsp/_/memory/**`) ï¿½Ì•ï¿½ï¿½ï¿½ï¿½ï¿½translation tablesï¿½ï¿½İ’è‚·ï¿½ï¿½ï¿½ **generic kernel code** (`src/memory/**`) ï¿½ï¿½Ê‚ï¿½ï¿½ÄŠÔÚQï¿½Æ‚ï¿½ï¿½é‚±ï¿½Æ‚È‚ï¿½ï¿½Cï¿½ï¿½ï¿½É’ï¿½ï¿½Ú“ï¿½ï¿½ì‚µï¿½Ä‚ï¿½ï¿½ï¿½ï¿½D
 
 The way it worked was that the `architectural MMU code` would query the `bsp code` about the start
 and end of the physical address space, and any special regions in this space that need a mapping
 that _is not_ normal chacheable DRAM. It would then go ahead and map the whole address space at once
 and never touch the translation tables again during runtime.
 
-‚±‚ê‚ğ“®‚©‚·•û–@‚Í `architectural MMU code` ‚ª `bsp code` ‚É•¨—address‹óŠÔ‚Ìn“_‚ÆI“_‚¨‚æ‚Ñ•¨—address‹óŠÔ‚Ì‚¤‚¿’Êí‚Ìcacheable DRAM‚Å‚È‚¢—Ìˆæ‚Émap‚³‚ê‚é•K—v‚Ì‚ ‚é“Á•Ê‚È—Ìˆæ‚ğ–â‚¢‡‚í‚¹‚é‚±‚Æ‚¾D
-‚±‚¤‚µ‚Äaddress‹óŠÔ‘S‘Ì‚ğmap‚µC‚±‚êˆÈ~Ä‚Ñtranslation tables‚ÉG‚ê‚é‚±‚Æ‚Í‚È‚¢D
+ï¿½ï¿½ï¿½ï¿½ğ“®‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½@ï¿½ï¿½ `architectural MMU code` ï¿½ï¿½ `bsp code` ï¿½É•ï¿½ï¿½ï¿½addressï¿½ï¿½Ô‚Ìnï¿½_ï¿½ÆIï¿½_ï¿½ï¿½ï¿½ï¿½Ñ•ï¿½ï¿½ï¿½addressï¿½ï¿½Ô‚Ì‚ï¿½ï¿½ï¿½ï¿½Êï¿½ï¿½cacheable DRAMï¿½Å‚È‚ï¿½ï¿½Ìˆï¿½ï¿½mapï¿½ï¿½ï¿½ï¿½ï¿½Kï¿½vï¿½Ì‚ï¿½ï¿½ï¿½ï¿½ï¿½Ê‚È—Ìˆï¿½ï¿½â‚¢ï¿½ï¿½ï¿½í‚¹ï¿½é‚±ï¿½Æ‚ï¿½ï¿½D
+ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½addressï¿½ï¿½Ô‘Sï¿½Ì‚ï¿½mapï¿½ï¿½ï¿½Cï¿½ï¿½ï¿½ï¿½È~ï¿½Ä‚ï¿½translation tablesï¿½ÉGï¿½ï¿½é‚±ï¿½Æ‚Í‚È‚ï¿½ï¿½D
 
 Changing in this tutorial, **architecture** and **bsp** code will no longer autonomously create the
 virtual memory mappings. Instead, this is now orchestrated by the kernel's **generic MMU subsystem
 code**.
 
-‚±‚Ìtutorial‚Å‚Ì•ÏX‚É‚æ‚èC **architecture** ‚Æ **bsp** ‚Ìcode‚Í‚à‚Í‚â©“®“I‚É‰¼‘zmemory mappings‚ğì‚ç‚È‚¢D
-‘ã‚í‚è‚ÉCkernel‚Ì **generic MMU subsystem code** ‚É“‡‚³‚ê‚éD
+ï¿½ï¿½ï¿½ï¿½tutorialï¿½Å‚Ì•ÏXï¿½É‚ï¿½ï¿½C **architecture** ï¿½ï¿½ **bsp** ï¿½ï¿½codeï¿½Í‚ï¿½ï¿½Í‚â©ï¿½ï¿½ï¿½Iï¿½É‰ï¿½ï¿½zmemory mappingsï¿½ï¿½ï¿½ï¿½ï¿½È‚ï¿½ï¿½D
+ï¿½ï¿½ï¿½ï¿½ÉCkernelï¿½ï¿½ **generic MMU subsystem code** ï¿½É“ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½D
 
 ### A New Mapping API in `src/memory/mmu/translation_table.rs`
 
 First, we define an interface for operating on `translation tables`:
 
-Å‰‚ÉC`translation tables`‚ğ‘€ì‚·‚é‚½‚ß‚Ìinterface‚ğ’è‹`‚·‚éD
+ï¿½Åï¿½ï¿½ÉC`translation tables`ï¿½ğ‘€ì‚·ï¿½é‚½ï¿½ß‚ï¿½interfaceï¿½ï¿½ï¿½`ï¿½ï¿½ï¿½ï¿½D
 
 ```rust
 /// Translation table operations.
 pub trait TranslationTable {
     /// Anything that needs to run before any of the other provided functions can be used.
+    ///
+    /// # Safety
+    ///
+    /// - Implementor must ensure that this function can run only once or is harmless if invoked
+    ///   multiple times.
     fn init(&mut self);
 
     /// The translation table's base address to be used for programming the MMU.
     fn phys_base_address(&self) -> Address<Physical>;
 
-    /// Map the given virtual pages to the given physical pages.
-    unsafe fn map_pages_at(
+    /// Map the given virtual memory region to the given physical memory region.
+    unsafe fn map_at(
         &mut self,
-        virt_pages: &PageSliceDescriptor<Virtual>,
-        phys_pages: &PageSliceDescriptor<Physical>,
+        virt_region: &MemoryRegion<Virtual>,
+        phys_region: &MemoryRegion<Physical>,
         attr: &AttributeFields,
     ) -> Result<(), &'static str>;
-
-    /// Obtain a free virtual page slice in the MMIO region.
-    fn next_mmio_virt_page_slice(
-        &mut self,
-        num_pages: usize,
-    ) -> Result<PageSliceDescriptor<Virtual>, &'static str>;
-
-    /// Check if a virtual page splice is in the "MMIO region".
-    fn is_virt_page_slice_mmio(&self, virt_pages: &PageSliceDescriptor<Virtual>) -> bool;
 }
 ```
 
@@ -169,23 +163,23 @@ driver (`src/arch/.../memory/mmu.rs`). This made sense because the MMU driver co
 that needed to be concerned with the table data structure, so having it accessible locally
 simplified things.
 
-kenrel‚Ìtranslation tables‚ğˆ—‚·‚é‚½‚ß‚Ìgeneric kernel code ‚ğ—LŒø‰»‚·‚é‚½‚ß‚ÉCÅ‰‚É‚±‚ê‚ç‚ğaccess‰Â”\‚É‚µ‚È‚¯‚Î‚È‚ç‚È‚¢D
-¡‚Ü‚Å‚±‚ê‚ç‚Í architenture ŒÅ—L‚Ì MMU drive (`src/arch/.../memory/mmu.rs`) ‚É‚¨‚¢‚Ä‰B‚³‚ê‚½\‘¢‚¾‚Á‚½D
-MMU code‚ªtable data\‘¢‚ÉŠÖ˜A•t‚¯‚é‚½‚ß‚É•K—v‚È‚¾‚¯‚Ìcode‚¾‚Á‚½‚½‚ß‚±‚ê‚ÍˆÓ–¡‚ğ‚È‚µ‚½D
-‚»‚Ì‚½‚ß‚±‚ê‚ğ‹ÇŠ“I‚Éaccess‰Â”\‚É‚µ‚Ä‚¨‚­‚±‚Æ‚Í•¨–‚ğŠÈ’P‚É‚·‚éD
+kenrelï¿½ï¿½translation tablesï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½é‚½ï¿½ß‚ï¿½generic kernel code ï¿½ï¿½Lï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½é‚½ï¿½ß‚ÉCï¿½Åï¿½ï¿½É‚ï¿½ï¿½ï¿½ï¿½ï¿½accessï¿½Â”\ï¿½É‚ï¿½ï¿½È‚ï¿½ï¿½Î‚È‚ï¿½È‚ï¿½ï¿½D
+ï¿½ï¿½ï¿½Ü‚Å‚ï¿½ï¿½ï¿½ï¿½ï¿½ architenture ï¿½Å—Lï¿½ï¿½ MMU drive (`src/arch/.../memory/mmu.rs`) ï¿½É‚ï¿½ï¿½ï¿½ï¿½Ä‰Bï¿½ï¿½ï¿½ê‚½ï¿½\ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½D
+MMU codeï¿½ï¿½table dataï¿½\ï¿½ï¿½ï¿½ÉŠÖ˜Aï¿½tï¿½ï¿½ï¿½é‚½ï¿½ß‚É•Kï¿½vï¿½È‚ï¿½ï¿½ï¿½ï¿½ï¿½codeï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ß‚ï¿½ï¿½ï¿½ÍˆÓ–ï¿½ï¿½ï¿½ï¿½È‚ï¿½ï¿½ï¿½ï¿½D
+ï¿½ï¿½ï¿½Ì‚ï¿½ï¿½ß‚ï¿½ï¿½ï¿½ï¿½ï¿½Çï¿½ï¿½Iï¿½ï¿½accessï¿½Â”\ï¿½É‚ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ‚Í•ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È’Pï¿½É‚ï¿½ï¿½ï¿½D
 
 Since the tables need to be exposed to the rest of the kernel code now, it makes sense to move them
 to `BSP` code. Because ultimately, it is the `BSP` that is defining the translation table's
 properties, such as the size of the virtual address space that the tables need to cover.
 
-tables‚Íkernel code‚©‚çŒ©‚¦‚é‚æ‚¤‚É‚·‚é•K—v‚ª‚ ‚é‚½‚ßCtables‚ğ`BSP`code‚ÉˆÚ“®‚·‚é‚±‚Æ‚ªd—v‚¾D
-ÅI“I‚É‚Ítable‚ª•¢‚í‚È‚¯‚ê‚Î‚È‚ç‚È‚¢‰¼‘zaddress‹óŠÔ‚Ì‘å‚«‚³‚Ì‚æ‚¤‚Ètranslation table‚Ì‘®«‚ğ’è‹`‚·‚é`BSP`‚¾‚©‚ç‚¾D
+tablesï¿½ï¿½kernel codeï¿½ï¿½ï¿½çŒ©ï¿½ï¿½ï¿½ï¿½æ‚¤ï¿½É‚ï¿½ï¿½ï¿½Kï¿½vï¿½ï¿½ï¿½ï¿½ï¿½é‚½ï¿½ßCtablesï¿½ï¿½`BSP`codeï¿½ÉˆÚ“ï¿½ï¿½ï¿½ï¿½é‚±ï¿½Æ‚ï¿½ï¿½dï¿½vï¿½ï¿½ï¿½D
+ï¿½ÅIï¿½Iï¿½É‚ï¿½tableï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È‚ï¿½ï¿½ï¿½Î‚È‚ï¿½È‚ï¿½ï¿½ï¿½ï¿½zaddressï¿½ï¿½Ô‚Ì‘å‚«ï¿½ï¿½ï¿½Ì‚æ‚¤ï¿½ï¿½translation tableï¿½Ì‘ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½`ï¿½ï¿½ï¿½ï¿½`BSP`ï¿½ï¿½ï¿½ï¿½ï¿½ç‚¾ï¿½D
 
 They are now defined in the global instances region of `src/bsp/.../memory/mmu.rs`. To control
 access, they are  guarded by an `InitStateLock`.
 
-‚±‚ê‚ç‚Í`src/bsp/.../memory/mmu.rs`‚Ìglobal instances region‚Å’è‹`‚³‚ê‚Ä‚¢‚éD
-access‚ğ§Œä‚·‚é‚½‚ßC‚±‚ê‚ç‚Í`InitStateLock`‚É‚æ‚Á‚Ä•ÛŒì‚³‚ê‚éD
+ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½`src/bsp/.../memory/mmu.rs`ï¿½ï¿½global instances regionï¿½Å’ï¿½`ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½D
+accessï¿½ğ§Œä‚·ï¿½é‚½ï¿½ßCï¿½ï¿½ï¿½ï¿½ï¿½ï¿½`InitStateLock`ï¿½É‚ï¿½ï¿½ï¿½Ä•ÛŒì‚³ï¿½ï¿½ï¿½D
 
 ```rust
 //--------------------------------------------------------------------------------------------------
@@ -205,13 +199,13 @@ This is done to (1) ensure a sane compile-time definition of the translation tab
 various bounds checks), and (2) to separate concerns between generic `MMU` code and specializations
 that come from the `architectural` part.
 
-\‘¢‘Ì`KernelTranslationTable`‚Í“¯‚¶file‚Å’è‹`‚³‚ê‚½Œ^•Ê–¼‚¾D“¯—l‚É`KernelVirtAddrSpace`Œ^‚ÉŠÖ˜A•t‚¯‚ç‚ê‚½Œ^‚©‚ç‚»‚Ì’è‹`‚ğæ“¾‚·‚éD`KernelVirtAddrSpace`‚Í‚»‚ê©g‚ª`memory::mmu::AddressSpace`Œ^‚ÌŒ^•Ê–¼‚Å‚ ‚éD
-‚Ğ‚Ç‚­•¡G‚É•·‚±‚¦‚é‚Ì‚Í•ª‚©‚Á‚Ä‚¢‚é‚ªCŒ‹‹Ç‚Í`const generics`‚Ì‚¢‚­‚Â‚©‚Ì‘w‚Å‚µ‚©‚È‚¢D`const generics`‚ÌÀ‘•‚Í`generic`‚Æ`arch`‚Ìcode‚ÉU‚è‚Î‚ß‚ç‚ê‚Ä‚¢‚éD
-‚±‚ê‚Í(1)‚¢‚­‚Â‚©‚Ì‹«ŠEŠm”F‚ğs‚¤‚±‚Æ‚É‚æ‚ètranslation table\‘¢‚ÌŒ’‘S‚Ècompile’è‹`‚ğ•ÛØ‚·‚é‚½‚ßC(2)generic `MMU` code‚Æ`architectural`•”•ª‚Å“Áê‰»‚³‚ê‚½‚à‚Ì‚ÌŠÖŒW‚ğ•ª—£‚·‚é‚½‚ß‚É‚È‚³‚ê‚éD
+ï¿½\ï¿½ï¿½ï¿½ï¿½`KernelTranslationTable`ï¿½Í“ï¿½ï¿½ï¿½fileï¿½Å’ï¿½`ï¿½ï¿½ï¿½ê‚½ï¿½^ï¿½Ê–ï¿½ï¿½ï¿½ï¿½Dï¿½ï¿½ï¿½lï¿½ï¿½`KernelVirtAddrSpace`ï¿½^ï¿½ÉŠÖ˜Aï¿½tï¿½ï¿½ï¿½ï¿½ê‚½ï¿½^ï¿½ï¿½ï¿½ç‚»ï¿½Ì’ï¿½`ï¿½ï¿½ï¿½æ“¾ï¿½ï¿½ï¿½ï¿½D`KernelVirtAddrSpace`ï¿½Í‚ï¿½ï¿½ê©ï¿½gï¿½ï¿½`memory::mmu::AddressSpace`ï¿½^ï¿½ÌŒ^ï¿½Ê–ï¿½ï¿½Å‚ï¿½ï¿½ï¿½D
+ï¿½Ğ‚Ç‚ï¿½ï¿½ï¿½ï¿½Gï¿½É•ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ì‚Í•ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½é‚ªï¿½Cï¿½ï¿½ï¿½Ç‚ï¿½`const generics`ï¿½Ì‚ï¿½ï¿½ï¿½ï¿½Â‚ï¿½ï¿½Ì‘wï¿½Å‚ï¿½ï¿½ï¿½ï¿½È‚ï¿½ï¿½D`const generics`ï¿½Ìï¿½ï¿½ï¿½ï¿½ï¿½`generic`ï¿½ï¿½`arch`ï¿½ï¿½codeï¿½ÉUï¿½ï¿½Î‚ß‚ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½D
+ï¿½ï¿½ï¿½ï¿½ï¿½(1)ï¿½ï¿½ï¿½ï¿½ï¿½Â‚ï¿½ï¿½Ì‹ï¿½ï¿½Eï¿½mï¿½Fï¿½ï¿½ï¿½sï¿½ï¿½ï¿½ï¿½ï¿½Æ‚É‚ï¿½ï¿½translation tableï¿½\ï¿½ï¿½ï¿½ÌŒï¿½ï¿½Sï¿½ï¿½compileï¿½ï¿½ï¿½ï¿½`ï¿½ï¿½ÛØ‚ï¿½ï¿½é‚½ï¿½ßC(2)generic `MMU` codeï¿½ï¿½`architectural`ï¿½ï¿½ï¿½ï¿½ï¿½Å“ï¿½ï¿½ê‰»ï¿½ï¿½ï¿½ê‚½ï¿½ï¿½ï¿½Ì‚ÌŠÖŒWï¿½ğ•ª—ï¿½ï¿½ï¿½ï¿½é‚½ï¿½ß‚É‚È‚ï¿½ï¿½ï¿½ï¿½D
 
 In the end, these tables can be accessed by calling `bsp::memory::mmu::kernel_translation_tables()`:
 
-Œ‹‹Ç‚ÍC‚±‚ê‚ç‚Ìtables‚Í`bsp::memory::mmu::kernel_translation_tables()`‚ğŒÄ‚Ño‚·‚±‚Æ‚Åaccess‰Â”\‚Æ‚È‚éD
+ï¿½ï¿½ï¿½Ç‚ÍCï¿½ï¿½ï¿½ï¿½ï¿½ï¿½tablesï¿½ï¿½`bsp::memory::mmu::kernel_translation_tables()`ï¿½ï¿½ï¿½Ä‚Ñoï¿½ï¿½ï¿½ï¿½ï¿½Æ‚ï¿½accessï¿½Â”\ï¿½Æ‚È‚ï¿½D
 
 ```rust
 /// Return a reference to the kernel's translation tables.
@@ -224,17 +218,17 @@ Finally, the generic kernel code (`src/memory/mmu.rs`) now provides a couple of 
 functions that access and manipulate this instance. They  are exported for the rest of the kernel to
 use:
 
-ÅŒã‚ÉCgeneric kernel code (`src/memory/mmu.rs`)‚Í‚±‚ÌÀ‘Ì‚Éaccess‚µˆ—‚·‚émemory mappingŠÖ”‚Ì‘g‚ğ’ñ‹Ÿ‚·‚éD
-‚±‚ê‚ç‚Íkernel‚Ì‘¼‚Ì•”•ª‚Åg‚í‚ê‚é‚½‚ß‚Éexport‚³‚ê‚éD
+ï¿½ÅŒï¿½ÉCgeneric kernel code (`src/memory/mmu.rs`)ï¿½Í‚ï¿½ï¿½Ìï¿½ï¿½Ì‚ï¿½accessï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½memory mappingï¿½Öï¿½ï¿½Ì‘gï¿½ï¿½ñ‹Ÿ‚ï¿½ï¿½ï¿½D
+ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½kernelï¿½Ì‘ï¿½ï¿½Ì•ï¿½ï¿½ï¿½ï¿½Ågï¿½ï¿½ï¿½é‚½ï¿½ß‚ï¿½exportï¿½ï¿½ï¿½ï¿½ï¿½D
 
 ```rust
-/// Raw mapping of virtual to physical pages in the kernel translation tables.
+/// Raw mapping of a virtual to physical region in the kernel translation tables.
 ///
 /// Prevents mapping into the MMIO range of the tables.
-pub unsafe fn kernel_map_pages_at(
+pub unsafe fn kernel_map_at(
     name: &'static str,
-    virt_pages: &PageSliceDescriptor<Virtual>,
-    phys_pages: &PageSliceDescriptor<Physical>,
+    virt_region: &MemoryRegion<Virtual>,
+    phys_region: &MemoryRegion<Physical>,
     attr: &AttributeFields,
 ) -> Result<(), &'static str>;
 
@@ -243,7 +237,7 @@ pub unsafe fn kernel_map_pages_at(
 /// Typically used by device drivers.
 pub unsafe fn kernel_map_mmio(
     name: &'static str,
-    phys_mmio_descriptor: &MMIODescriptor<Physical>,
+    mmio_descriptor: &MMIODescriptor,
 ) -> Result<Address<Virtual>, &'static str>;
 
 /// Map the kernel's binary. Returns the translation table's base address.
@@ -278,23 +272,23 @@ Both functions internally use `bsp` and `arch` specific code to achieve their go
 ```rust
 /// Map the kernel binary.
 pub unsafe fn kernel_map_binary() -> Result<(), &'static str> {
-    generic_mmu::kernel_map_pages_at(
+    generic_mmu::kernel_map_at(
         "Kernel boot-core stack",
-        &virt_stack_page_desc(),
-        &phys_stack_page_desc(),
-        &AttributeFields {
-            mem_attributes: MemAttributes::CacheableDRAM,
-            acc_perms: AccessPermissions::ReadWrite,
-            execute_never: true,
-        },
-    )?;
-
-    generic_mmu::kernel_map_pages_at(
-        "Kernel code and RO data",
         // omitted for brevity.
     )?;
 
-    generic_mmu::kernel_map_pages_at(
+    generic_mmu::kernel_map_at(
+        "Kernel code and RO data",
+        &virt_code_region(),
+        &kernel_virt_to_phys_region(virt_code_region()),
+        &AttributeFields {
+            mem_attributes: MemAttributes::CacheableDRAM,
+            acc_perms: AccessPermissions::ReadOnly,
+            execute_never: false,
+        },
+    )?;
+
+    generic_mmu::kernel_map_at(
         "Kernel data and bss",
         // omitted for brevity.
     )?;
@@ -310,7 +304,7 @@ of a raw address. The following is an example for the `UART`:
 impl PL011Uart {
     /// Create an instance.
     pub const unsafe fn new(
-        phys_mmio_descriptor: memory::mmu::MMIODescriptor<Physical>,
+        mmio_descriptor: memory::mmu::MMIODescriptor,
         irq_number: bsp::device_driver::IRQNumber,
     ) -> Self {
         Self {
@@ -325,48 +319,111 @@ during kernel boot, the MMIO Descriptor is used to remap the MMIO region on dema
 
 ```rust
 unsafe fn init(&self) -> Result<(), &'static str> {
-    let virt_addr =
-        memory::mmu::kernel_map_mmio(self.compatible(), &self.phys_mmio_descriptor)?;
+    let virt_addr = memory::mmu::kernel_map_mmio(self.compatible(), &self.mmio_descriptor)?;
 
-    self.inner.lock(|inner| inner.init(Some(virt_addr.into_usize())))?;
+    self.inner
+        .lock(|inner| inner.init(Some(virt_addr.as_usize())))?;
 
      // omitted for brevity.
 
-     Ok(())
+    Ok(())
 }
 ```
+
+### MMIO Virtual Address Allocation
+
+Peeking inside `memory::mmu::kernel_map_mmio()`, we can see that a `virtual address region` is
+obtained from an `allocator` before remapping:
+
+```rust
+pub unsafe fn kernel_map_mmio(
+    name: &'static str,
+    mmio_descriptor: &MMIODescriptor,
+) -> Result<Address<Virtual>, &'static str> {
+
+    // omitted
+
+        let virt_region =
+            alloc::kernel_mmio_va_allocator().lock(|allocator| allocator.alloc(num_pages))?;
+
+        kernel_map_at_unchecked(
+            name,
+            &virt_region,
+            &phys_region,
+            &AttributeFields {
+                mem_attributes: MemAttributes::Device,
+                acc_perms: AccessPermissions::ReadWrite,
+                execute_never: true,
+            },
+        )?;
+
+    // omitted
+}
+```
+
+This allocator is defined and implemented in the added file `src/memory/mmu/alloc.rs`. Like other
+parts of the mapping code, its implementation makes use of the newly introduced `PageAddress<ATYPE>`
+and `MemoryRegion<ATYPE>` types (in [`src/memory/mmu/types.rs`](src/memory/mmu/types.rs)), but apart
+from that is rather straight forward. Therefore, it won't be covered in details here.
+
+The more interesting question is: How does the allocator get to learn which VAs it can use?
+
+This is happening in the following function, which gets called as part of
+`memory::mmu::post_enable_init()`, which in turn gets called in `kernel_init()` after the MMU has
+been turned on.
+
+```rust
+/// Query the BSP for the reserved virtual addresses for MMIO remapping and initialize the kernel's
+/// MMIO VA allocator with it.
+fn kernel_init_mmio_va_allocator() {
+    let region = bsp::memory::mmu::virt_mmio_remap_region();
+
+    alloc::kernel_mmio_va_allocator().lock(|allocator| allocator.initialize(region));
+}
+```
+
+Again, it is the `BSP` that provides the information. The `BSP` itself indirectly gets it from the
+linker script. In it, we have defined an `8 MiB` region right after the `.data` segment:
+
+```ld.s
+__data_end_exclusive = .;
+
+/***********************************************************************************************
+* MMIO Remap Reserved
+***********************************************************************************************/
+__mmio_remap_start = .;
+. += 8 * 1024 * 1024;
+__mmio_remap_end_exclusive = .;
+
+ASSERT((. & PAGE_MASK) == 0, "MMIO remap reservation is not page aligned")
+```
+
+The two symbols `__mmio_remap_start` and `__mmio_remap_end_exclusive` are used by the `BSP` to learn
+the VA range.
 
 ### Supporting Changes
 
 There's a couple of changes not covered in this tutorial text, but the reader should ideally skim
 through them:
 
-‚±‚Ìtutorial•¶‚Å‚Íˆµ‚í‚ê‚Ä‚¢‚È‚¢•ÏX‚ª‚¢‚­‚Â‚©‚ ‚é‚ªC“ÇÒ‚Í‚Å‚«‚ê‚Î‚±‚ê‚ç‚ğ—¬‚µ“Ç‚İ‚·‚×‚«‚¾D
-
-- [`src/bsp/raspberrypi/memory.rs`](src/bsp/raspberrypi/memory.rs) and
-  [`src/bsp/raspberrypi/link.ld`](src/bsp/raspberrypi/link.ld) changed the location of the boot
-  core's stack. It is now located after the data segment, and separated by an unmapped `guard page`.
-  There is also supporting code in
-  [`src/_arch/aarch64/exception.rs`](src/_arch/aarch64/exception.rs) that runs on data aborts and
-  checks if the fault address lies within the `stack guard page`. This can be an indication that a
-  kernel stack overflow happened.
-- [`src/memory/mmu/types.rs`](src/memory/mmu/types.rs) introduces a couple of supporting types, like
-  `Page<ATYPE>`.
+- [`src/memory.rs`](src/memory.rs) and [`src/memory/mmu/types.rs`](src/memory/mmu/types.rs)
+  introduce a couple of supporting types, like`Address<ATYPE>`, `PageAddress<ATYPE>` and
+  `MemoryRegion<ATYPE>`. It is worth reading their implementations.
 - [`src/memory/mmu/mapping_record.rs`](src/memory/mmu/mapping_record.rs) provides the generic kernel
   code's way of tracking previous memory mappings for use cases such as reusing existing mappings
   (in case of drivers that have their MMIO ranges in the same `64 KiB` page) or printing mappings
   statistics.
 
-- [`src/bsp/raspberrypi/memory.rs`](src/bsp/raspberrypi/memory.rs) ‚Æ [`src/bsp/raspberrypi/link.ld`](src/bsp/raspberrypi/link.ld) ‚Íboot core‚Ìstack‚ÌêŠ‚ğ•ÏX‚·‚éD‚±‚ê‚Ídata segment‚ÌŒã‚É’u‚©‚êCmap‚³‚ê‚È‚¢`guard page`‚É‚æ‚Á‚Ä•ªŠ„‚³‚ê‚éD[`src/_arch/aarch64/exception.rs`](src/_arch/aarch64/exception.rs)‚Ídata abort‚ÉÀs‚µCfault address‚ª`stack guard page`ã‚É‚ ‚é‚©‚Ç‚¤‚©Šm”F‚·‚éD‚±‚ê‚Íkernel stack overflow‚ª‹N‚«‚½‚©‚Ç‚¤‚©‚Ìw•W‚É‚È‚è‚¦‚éD
-- [`src/memory/mmu/types.rs`](src/memory/mmu/types.rs)‚Í`Page<ATYPE>`‚È‚Ç‚Ì•K—v‚ÈŒ^‚ğ“±“ü‚·‚éD
-- [`src/memory/mmu/mapping_record.rs`](src/memory/mmu/mapping_record.rs)‚ÍŠù‘¶‚Ìmappings‚ğÄ—˜—p(“¯‚¶64KiB page‚ÉMMIO”ÍˆÍ‚ğ‚Âdrivers‚Ìê‡)‚µ‚½‚èmappings‚Ì“Œv‚ğ•\¦‚·‚é‚½‚ß‚Égeneric kernel code‚ªˆÈ‘O‚Ìmemory mappings‚ğ’ÇÕ‚·‚éè’i‚ğ’ñ‹Ÿ‚·‚éD
+- [`src/bsp/raspberrypi/memory.rs`](src/bsp/raspberrypi/memory.rs) ï¿½ï¿½ [`src/bsp/raspberrypi/link.ld`](src/bsp/raspberrypi/link.ld) ï¿½ï¿½boot coreï¿½ï¿½stackï¿½ÌêŠï¿½ï¿½ÏXï¿½ï¿½ï¿½ï¿½Dï¿½ï¿½ï¿½ï¿½ï¿½data segmentï¿½ÌŒï¿½É’uï¿½ï¿½ï¿½ï¿½Cmapï¿½ï¿½ï¿½ï¿½È‚ï¿½`guard page`ï¿½É‚ï¿½ï¿½ï¿½Ä•ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½D[`src/_arch/aarch64/exception.rs`](src/_arch/aarch64/exception.rs)ï¿½ï¿½data abortï¿½ï¿½ï¿½Éï¿½ï¿½sï¿½ï¿½ï¿½Cfault addressï¿½ï¿½`stack guard page`ï¿½ï¿½É‚ï¿½ï¿½é‚©ï¿½Ç‚ï¿½ï¿½ï¿½ï¿½mï¿½Fï¿½ï¿½ï¿½ï¿½Dï¿½ï¿½ï¿½ï¿½ï¿½kernel stack overflowï¿½ï¿½ï¿½Nï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç‚ï¿½ï¿½ï¿½ï¿½Ìwï¿½Wï¿½É‚È‚è‚¦ï¿½ï¿½D
+- [`src/memory/mmu/types.rs`](src/memory/mmu/types.rs)ï¿½ï¿½`Page<ATYPE>`ï¿½È‚Ç‚Ì•Kï¿½vï¿½ÈŒ^ï¿½ğ“±“ï¿½ï¿½ï¿½ï¿½ï¿½D
+- [`src/memory/mmu/mapping_record.rs`](src/memory/mmu/mapping_record.rs)ï¿½ÍŠï¿½ï¿½ï¿½ï¿½ï¿½mappingsï¿½ï¿½ï¿½Ä—ï¿½ï¿½p(ï¿½ï¿½ï¿½ï¿½64KiB pageï¿½ï¿½MMIOï¿½ÍˆÍ‚ï¿½ï¿½ï¿½ï¿½ï¿½driversï¿½Ìê‡)ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½mappingsï¿½Ì“ï¿½ï¿½vï¿½ï¿½\ï¿½ï¿½ï¿½ï¿½ï¿½é‚½ï¿½ß‚ï¿½generic kernel codeï¿½ï¿½ï¿½È‘Oï¿½ï¿½memory mappingsï¿½ï¿½ÇÕ‚ï¿½ï¿½ï¿½ï¿½iï¿½ï¿½ñ‹Ÿ‚ï¿½ï¿½ï¿½D
 
 ## Test it
 
-When you load the kernel, you can now see that the driver's MMIO virtual addresses start at
-`0x1_f000_0000`:
+When you load the kernel, you can now see that the driver's MMIO virtual addresses start right after
+the `.data` section:
 
-Kernel‚ğ“Ç‚İ‚ñ‚¾Cdriver‚ÌMMIO‚Ì‰¼‘zaddress‚ª`0x1_f000_0000`‚©‚çn‚Ü‚é‚±‚Æ‚ğŠm”F‚Å‚«‚éD
+Kernelï¿½ï¿½Ç‚İï¿½ï¿½ñ‚¾ï¿½ï¿½Cdriverï¿½ï¿½MMIOï¿½Ì‰ï¿½ï¿½zaddressï¿½ï¿½`0x1_f000_0000`ï¿½ï¿½ï¿½ï¿½nï¿½Ü‚é‚±ï¿½Æ‚ï¿½ï¿½mï¿½Fï¿½Å‚ï¿½ï¿½ï¿½D
 
 Raspberry Pi 3:
 
@@ -378,6 +435,7 @@ Minipush 1.0
 [MP] â³ Waiting for /dev/ttyUSB0
 [MP] âœ… Serial connected
 [MP] ğŸ”Œ Please power the target now
+
  __  __ _      _ _                 _
 |  \/  (_)_ _ (_) |   ___  __ _ __| |
 | |\/| | | ' \| | |__/ _ \/ _` / _` |
@@ -389,19 +447,19 @@ Minipush 1.0
 [MP] â© Pushing 67 KiB =========================================ğŸ¦€ 100% 0 KiB/s Time: 00:00:00
 [ML] Loaded! Executing the payload now
 
-[    0.785711] mingo version 0.14.0
-[    0.785919] Booting on: Raspberry Pi 3
-[    0.786374] MMU online:
-[    0.786666]       -------------------------------------------------------------------------------------------------------------------------------------------
-[    0.788410]                         Virtual                                   Physical               Size       Attr                    Entity
-[    0.790154]       -------------------------------------------------------------------------------------------------------------------------------------------
-[    0.791902]       0x0000_0000_0008_0000..0x0000_0000_0008_ffff --> 0x00_0008_0000..0x00_0008_ffff |  64 KiB | C   RO X  | Kernel code and RO data
-[    0.793515]       0x0000_0000_0009_0000..0x0000_0000_001b_ffff --> 0x00_0009_0000..0x00_001b_ffff |   1 MiB | C   RW XN | Kernel data and bss
-[    0.795085]       0x0000_0000_001d_0000..0x0000_0000_0024_ffff --> 0x00_001d_0000..0x00_0024_ffff | 512 KiB | C   RW XN | Kernel boot-core stack
-[    0.796688]       0x0000_0001_f000_0000..0x0000_0001_f000_ffff --> 0x00_3f20_0000..0x00_3f20_ffff |  64 KiB | Dev RW XN | BCM GPIO
-[    0.798139]                                                                                                             | BCM PL011 UART
-[    0.799657]       0x0000_0001_f001_0000..0x0000_0001_f001_ffff --> 0x00_3f00_0000..0x00_3f00_ffff |  64 KiB | Dev RW XN | BCM Peripheral Interrupt Controller
-[    0.801400]       -------------------------------------------------------------------------------------------------------------------------------------------
+[    0.758253] mingo version 0.14.0
+[    0.758460] Booting on: Raspberry Pi 3
+[    0.758915] MMU online:
+[    0.759208]       -------------------------------------------------------------------------------------------------------------------------------------------
+[    0.760952]                         Virtual                                   Physical               Size       Attr                    Entity
+[    0.762696]       -------------------------------------------------------------------------------------------------------------------------------------------
+[    0.764441]       0x0000_0000_0000_0000..0x0000_0000_0007_ffff --> 0x00_0000_0000..0x00_0007_ffff | 512 KiB | C   RW XN | Kernel boot-core stack
+[    0.766044]       0x0000_0000_0008_0000..0x0000_0000_0008_ffff --> 0x00_0008_0000..0x00_0008_ffff |  64 KiB | C   RO X  | Kernel code and RO data
+[    0.767658]       0x0000_0000_0009_0000..0x0000_0000_000d_ffff --> 0x00_0009_0000..0x00_000d_ffff | 320 KiB | C   RW XN | Kernel data and bss
+[    0.769229]       0x0000_0000_000e_0000..0x0000_0000_000e_ffff --> 0x00_3f20_0000..0x00_3f20_ffff |  64 KiB | Dev RW XN | BCM GPIO
+[    0.770680]                                                                                                             | BCM PL011 UART
+[    0.772197]       0x0000_0000_000f_0000..0x0000_0000_000f_ffff --> 0x00_3f00_0000..0x00_3f00_ffff |  64 KiB | Dev RW XN | BCM Peripheral Interrupt Controller
+[    0.773941]       -------------------------------------------------------------------------------------------------------------------------------------------
 ```
 
 Raspberry Pi 4:
@@ -414,6 +472,7 @@ Minipush 1.0
 [MP] â³ Waiting for /dev/ttyUSB0
 [MP] âœ… Serial connected
 [MP] ğŸ”Œ Please power the target now
+
  __  __ _      _ _                 _
 |  \/  (_)_ _ (_) |   ___  __ _ __| |
 | |\/| | | ' \| | |__/ _ \/ _` / _` |
@@ -425,20 +484,21 @@ Minipush 1.0
 [MP] â© Pushing 74 KiB =========================================ğŸ¦€ 100% 0 KiB/s Time: 00:00:00
 [ML] Loaded! Executing the payload now
 
-[    0.869392] mingo version 0.14.0
-[    0.869425] Booting on: Raspberry Pi 4
-[    0.869880] MMU online:
-[    0.870173]       -------------------------------------------------------------------------------------------------------------------------------------------
-[    0.871917]                         Virtual                                   Physical               Size       Attr                    Entity
-[    0.873661]       -------------------------------------------------------------------------------------------------------------------------------------------
-[    0.875407]       0x0000_0000_0008_0000..0x0000_0000_0008_ffff --> 0x00_0008_0000..0x00_0008_ffff |  64 KiB | C   RO X  | Kernel code and RO data
-[    0.877021]       0x0000_0000_0009_0000..0x0000_0000_001b_ffff --> 0x00_0009_0000..0x00_001b_ffff |   1 MiB | C   RW XN | Kernel data and bss
-[    0.878591]       0x0000_0000_001d_0000..0x0000_0000_0024_ffff --> 0x00_001d_0000..0x00_0024_ffff | 512 KiB | C   RW XN | Kernel boot-core stack
-[    0.880195]       0x0000_0001_f000_0000..0x0000_0001_f000_ffff --> 0x00_fe20_0000..0x00_fe20_ffff |  64 KiB | Dev RW XN | BCM GPIO
-[    0.881645]                                                                                                             | BCM PL011 UART
-[    0.883163]       0x0000_0001_f001_0000..0x0000_0001_f001_ffff --> 0x00_ff84_0000..0x00_ff84_ffff |  64 KiB | Dev RW XN | GICD
-[    0.884570]                                                                                                             | GICC
-[    0.885979]       -------------------------------------------------------------------------------------------------------------------------------------------
+[    0.842275] mingo version 0.14.0
+[    0.842308] Booting on: Raspberry Pi 4
+[    0.842763] MMU online:
+[    0.843055]       -------------------------------------------------------------------------------------------------------------------------------------------
+[    0.844800]                         Virtual                                   Physical               Size       Attr                    Entity
+[    0.846544]       -------------------------------------------------------------------------------------------------------------------------------------------
+[    0.848288]       0x0000_0000_0000_0000..0x0000_0000_0007_ffff --> 0x00_0000_0000..0x00_0007_ffff | 512 KiB | C   RW XN | Kernel boot-core stack
+[    0.849892]       0x0000_0000_0008_0000..0x0000_0000_0008_ffff --> 0x00_0008_0000..0x00_0008_ffff |  64 KiB | C   RO X  | Kernel code and RO data
+[    0.851505]       0x0000_0000_0009_0000..0x0000_0000_000d_ffff --> 0x00_0009_0000..0x00_000d_ffff | 320 KiB | C   RW XN | Kernel data and bss
+[    0.853076]       0x0000_0000_000e_0000..0x0000_0000_000e_ffff --> 0x00_fe20_0000..0x00_fe20_ffff |  64 KiB | Dev RW XN | BCM GPIO
+[    0.854528]                                                                                                             | BCM PL011 UART
+[    0.856045]       0x0000_0000_000f_0000..0x0000_0000_000f_ffff --> 0x00_ff84_0000..0x00_ff84_ffff |  64 KiB | Dev RW XN | GICD
+[    0.857453]                                                                                                             | GICC
+[    0.858862]       -------------------------------------------------------------------------------------------------------------------------------------------
+
 ```
 
 ## Diff to previous
@@ -453,78 +513,32 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/Cargo.toml 14_virtual_mem_part2_mm
 -version = "0.13.0"
 +version = "0.14.0"
  authors = ["Andre Richter <andre.o.richter@gmail.com>"]
- edition = "2018"
-
-
-diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/exception.rs 14_virtual_mem_part2_mmio_remap/src/_arch/aarch64/exception.rs
---- 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/exception.rs
-+++ 14_virtual_mem_part2_mmio_remap/src/_arch/aarch64/exception.rs
-@@ -11,7 +11,11 @@
- //!
- //! crate::exception::arch_exception
-
--use crate::{bsp, exception};
-+use crate::{
-+    bsp::{self},
-+    exception,
-+    memory::Address,
-+};
- use core::{cell::UnsafeCell, fmt};
- use cortex_a::{barrier, regs::*};
- use register::InMemoryRegister;
-@@ -50,6 +54,20 @@
- // Private Code
- //--------------------------------------------------------------------------------------------------
-
-+/// Check if additional context can be derived from a data abort.
-+fn inspect_data_abort(f: &mut fmt::Formatter) -> fmt::Result {
-+    let fault_addr = Address::new(FAR_EL1.get() as usize);
-+
-+    if bsp::memory::mmu::virt_boot_core_stack_guard_page_desc().contains(fault_addr) {
-+        writeln!(
-+            f,
-+            "\n\n      >> Attempted to access the guard page of the kernel's boot core stack <<"
-+        )?;
-+    }
-+
-+    Ok(())
-+}
-+
- /// Prints verbose information about the exception and then panics.
- fn default_exception_handler(e: &ExceptionContext) {
-     panic!(
-@@ -166,7 +184,9 @@
-         writeln!(f, " - {}", ec_translation)?;
-
-         // Raw print of instruction specific syndrome.
--        write!(f, "      Instr Specific Syndrome (ISS): {:#x}", esr_el1.read(ESR_EL1::ISS))
-+        write!(f, "      Instr Specific Syndrome (ISS): {:#x}", esr_el1.read(ESR_EL1::ISS))?;
-+
-+        inspect_data_abort(f)
-     }
- }
+ edition = "2021"
 
 
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu/translation_table.rs 14_virtual_mem_part2_mmio_remap/src/_arch/aarch64/memory/mmu/translation_table.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu/translation_table.rs
 +++ 14_virtual_mem_part2_mmio_remap/src/_arch/aarch64/memory/mmu/translation_table.rs
-@@ -15,9 +15,12 @@
+@@ -14,10 +14,14 @@
+ //! crate::memory::mmu::translation_table::arch_translation_table
 
  use crate::{
-     bsp, memory,
+-    bsp, memory,
 -    memory::mmu::{
 -        arch_mmu::{Granule512MiB, Granule64KiB},
 -        AccessPermissions, AttributeFields, MemAttributes,
++    bsp,
 +    memory::{
++        self,
 +        mmu::{
 +            arch_mmu::{Granule512MiB, Granule64KiB},
-+            AccessPermissions, AttributeFields, MemAttributes, Page, PageSliceDescriptor,
++            AccessPermissions, AttributeFields, MemAttributes, MemoryRegion, PageAddress,
 +        },
 +        Address, Physical, Virtual,
      },
  };
  use core::convert;
-@@ -117,12 +120,9 @@
+@@ -121,12 +125,9 @@
  }
 
  trait StartAddr {
@@ -538,7 +552,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu/trans
  //--------------------------------------------------------------------------------------------------
  // Public Definitions
  //--------------------------------------------------------------------------------------------------
-@@ -137,10 +137,13 @@
+@@ -141,10 +142,10 @@
 
      /// Table descriptors, covering 512 MiB windows.
      lvl2: [TableDescriptor; NUM_TABLES],
@@ -546,16 +560,13 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu/trans
 
 -/// A translation table type for the kernel space.
 -pub type KernelTranslationTable = FixedSizeTranslationTable<NUM_LVL2_TABLES>;
-+    /// Index of the next free MMIO page.
-+    cur_l3_mmio_index: usize,
-+
 +    /// Have the tables been initialized?
 +    initialized: bool,
 +}
 
  //--------------------------------------------------------------------------------------------------
  // Private Code
-@@ -148,12 +151,8 @@
+@@ -152,12 +153,8 @@
 
  // The binary is still identity mapped, so we don't need to convert here.
  impl<T, const N: usize> StartAddr for [T; N] {
@@ -570,7 +581,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu/trans
      }
  }
 
-@@ -166,10 +165,10 @@
+@@ -170,10 +167,10 @@
      }
 
      /// Create an instance pointing to the supplied address.
@@ -579,23 +590,30 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu/trans
          let val = InMemoryRegister::<u64, STAGE1_TABLE_DESCRIPTOR::Register>::new(0);
 
 -        let shifted = phys_next_lvl_table_addr >> Granule64KiB::SHIFT;
-+        let shifted = phys_next_lvl_table_addr.into_usize() >> Granule64KiB::SHIFT;
++        let shifted = phys_next_lvl_table_addr.as_usize() >> Granule64KiB::SHIFT;
          val.write(
              STAGE1_TABLE_DESCRIPTOR::NEXT_LEVEL_TABLE_ADDR_64KiB.val(shifted as u64)
                  + STAGE1_TABLE_DESCRIPTOR::TYPE::Table
-@@ -226,7 +225,10 @@
+@@ -230,12 +227,15 @@
      }
 
      /// Create an instance.
 -    pub fn from_output_addr(phys_output_addr: usize, attribute_fields: &AttributeFields) -> Self {
-+    pub fn from_output_addr(
-+        phys_output_addr: *const Page<Physical>,
++    pub fn from_output_page_addr(
++        phys_output_page_addr: PageAddress<Physical>,
 +        attribute_fields: &AttributeFields,
 +    ) -> Self {
          let val = InMemoryRegister::<u64, STAGE1_PAGE_DESCRIPTOR::Register>::new(0);
 
-         let shifted = phys_output_addr as u64 >> Granule64KiB::SHIFT;
-@@ -240,50 +242,193 @@
+-        let shifted = phys_output_addr as u64 >> Granule64KiB::SHIFT;
++        let shifted = phys_output_page_addr.into_inner().as_usize() >> Granule64KiB::SHIFT;
+         val.write(
+-            STAGE1_PAGE_DESCRIPTOR::OUTPUT_ADDR_64KiB.val(shifted)
++            STAGE1_PAGE_DESCRIPTOR::OUTPUT_ADDR_64KiB.val(shifted as u64)
+                 + STAGE1_PAGE_DESCRIPTOR::AF::True
+                 + STAGE1_PAGE_DESCRIPTOR::TYPE::Page
+                 + STAGE1_PAGE_DESCRIPTOR::VALID::True
+@@ -244,50 +244,133 @@
 
          Self { value: val.get() }
      }
@@ -620,10 +638,6 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu/trans
 +}
 +
  impl<const NUM_TABLES: usize> FixedSizeTranslationTable<NUM_TABLES> {
-+    // Reserve the last 256 MiB of the address space for MMIO mappings.
-+    const L2_MMIO_START_INDEX: usize = NUM_TABLES - 1;
-+    const L3_MMIO_START_INDEX: usize = 8192 / 2;
-+
      /// Create an instance.
 +    #[allow(clippy::assertions_on_constants)]
      pub const fn new() -> Self {
@@ -635,7 +649,6 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu/trans
          Self {
              lvl3: [[PageDescriptor::new_zeroed(); 8192]; NUM_TABLES],
              lvl2: [TableDescriptor::new_zeroed(); NUM_TABLES],
-+            cur_l3_mmio_index: 0,
 +            initialized: false,
          }
      }
@@ -649,60 +662,57 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu/trans
 -        for (l2_nr, l2_entry) in self.lvl2.iter_mut().enumerate() {
 -            *l2_entry =
 -                TableDescriptor::from_next_lvl_table_addr(self.lvl3[l2_nr].phys_start_addr_usize());
-+    /// The start address of the table's MMIO range.
-+    #[inline(always)]
-+    fn mmio_start_addr(&self) -> Address<Virtual> {
-+        Address::new(
-+            (Self::L2_MMIO_START_INDEX << Granule512MiB::SHIFT)
-+                | (Self::L3_MMIO_START_INDEX << Granule64KiB::SHIFT),
-+        )
-+    }
-+
-+    /// The inclusive end address of the table's MMIO range.
-+    #[inline(always)]
-+    fn mmio_end_addr_inclusive(&self) -> Address<Virtual> {
-+        Address::new(
-+            (Self::L2_MMIO_START_INDEX << Granule512MiB::SHIFT)
-+                | (8191 << Granule64KiB::SHIFT)
-+                | (Granule64KiB::SIZE - 1),
-+        )
-+    }
-+
 +    /// Helper to calculate the lvl2 and lvl3 indices from an address.
 +    #[inline(always)]
-+    fn lvl2_lvl3_index_from(
++    fn lvl2_lvl3_index_from_page_addr(
 +        &self,
-+        addr: *const Page<Virtual>,
++        virt_page_addr: PageAddress<Virtual>,
 +    ) -> Result<(usize, usize), &'static str> {
-+        let addr = addr as usize;
++        let addr = virt_page_addr.into_inner().as_usize();
 +        let lvl2_index = addr >> Granule512MiB::SHIFT;
 +        let lvl3_index = (addr & Granule512MiB::MASK) >> Granule64KiB::SHIFT;
-+
-+        if lvl2_index > (NUM_TABLES - 1) {
-+            return Err("Virtual page is out of bounds of translation table");
-+        }
-+
-+        Ok((lvl2_index, lvl3_index))
-+    }
-+
-+    /// Returns the PageDescriptor corresponding to the supplied Page.
-+    #[inline(always)]
-+    fn page_descriptor_from(
-+        &mut self,
-+        addr: *const Page<Virtual>,
-+    ) -> Result<&mut PageDescriptor, &'static str> {
-+        let (lvl2_index, lvl3_index) = self.lvl2_lvl3_index_from(addr)?;
-+
-+        Ok(&mut self.lvl3[lvl2_index][lvl3_index])
-+    }
-+}
-+
-+//------------------------------------------------------------------------------
-+// OS Interface Code
-+//------------------------------------------------------------------------------
 
 -            for (l3_nr, l3_entry) in self.lvl3[l2_nr].iter_mut().enumerate() {
 -                let virt_addr = (l2_nr << Granule512MiB::SHIFT) + (l3_nr << Granule64KiB::SHIFT);
++        if lvl2_index > (NUM_TABLES - 1) {
++            return Err("Virtual page is out of bounds of translation table");
++        }
+
+-                let (phys_output_addr, attribute_fields) =
+-                    bsp::memory::mmu::virt_mem_layout().virt_addr_properties(virt_addr)?;
++        Ok((lvl2_index, lvl3_index))
++    }
+
+-                *l3_entry = PageDescriptor::from_output_addr(phys_output_addr, &attribute_fields);
+-            }
++    /// Sets the PageDescriptor corresponding to the supplied page address.
++    ///
++    /// Doesn't allow overriding an already valid page.
++    #[inline(always)]
++    fn set_page_descriptor_from_page_addr(
++        &mut self,
++        virt_page_addr: PageAddress<Virtual>,
++        new_desc: &PageDescriptor,
++    ) -> Result<(), &'static str> {
++        let (lvl2_index, lvl3_index) = self.lvl2_lvl3_index_from_page_addr(virt_page_addr)?;
++        let desc = &mut self.lvl3[lvl2_index][lvl3_index];
++
++        if desc.is_valid() {
++            return Err("Virtual page is already mapped");
+         }
+
++        *desc = *new_desc;
+         Ok(())
+     }
++}
+
+-    /// The translation table's base address to be used for programming the MMU.
+-    pub fn phys_base_address(&self) -> u64 {
+-        self.lvl2.phys_start_addr_u64()
++//------------------------------------------------------------------------------
++// OS Interface Code
++//------------------------------------------------------------------------------
++
 +impl<const NUM_TABLES: usize> memory::mmu::translation_table::interface::TranslationTable
 +    for FixedSizeTranslationTable<NUM_TABLES>
 +{
@@ -713,12 +723,12 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu/trans
 +
 +        // Populate the l2 entries.
 +        for (lvl2_nr, lvl2_entry) in self.lvl2.iter_mut().enumerate() {
-+            let desc =
-+                TableDescriptor::from_next_lvl_table_addr(self.lvl3[lvl2_nr].phys_start_addr());
-+            *lvl2_entry = desc;
++            let phys_table_addr = self.lvl3[lvl2_nr].phys_start_addr();
++
++            let new_desc = TableDescriptor::from_next_lvl_table_addr(phys_table_addr);
++            *lvl2_entry = new_desc;
 +        }
 +
-+        self.cur_l3_mmio_index = Self::L3_MMIO_START_INDEX;
 +        self.initialized = true;
 +    }
 +
@@ -726,87 +736,36 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu/trans
 +        self.lvl2.phys_start_addr()
 +    }
 +
-+    unsafe fn map_pages_at(
++    unsafe fn map_at(
 +        &mut self,
-+        virt_pages: &PageSliceDescriptor<Virtual>,
-+        phys_pages: &PageSliceDescriptor<Physical>,
++        virt_region: &MemoryRegion<Virtual>,
++        phys_region: &MemoryRegion<Physical>,
 +        attr: &AttributeFields,
 +    ) -> Result<(), &'static str> {
 +        assert!(self.initialized, "Translation tables not initialized");
 +
-+        let p = phys_pages.as_slice();
-+        let v = virt_pages.as_slice();
++        if virt_region.size() != phys_region.size() {
++            return Err("Tried to map memory regions with unequal sizes");
++        }
 +
-+        // No work to do for empty slices.
-+        if v.is_empty() {
-+            return Ok(());
-+        }
-
--                let (phys_output_addr, attribute_fields) =
--                    bsp::memory::mmu::virt_mem_layout().virt_addr_properties(virt_addr)?;
-+        if v.len() != p.len() {
-+            return Err("Tried to map page slices with unequal sizes");
-+        }
-
--                *l3_entry = PageDescriptor::from_output_addr(phys_output_addr, &attribute_fields);
-+        if p.last().unwrap().as_ptr() >= bsp::memory::mmu::phys_addr_space_end_page() {
++        if phys_region.end_exclusive_page_addr() > bsp::memory::phys_addr_space_end_exclusive_addr()
++        {
 +            return Err("Tried to map outside of physical address space");
 +        }
 +
-+        let iter = p.iter().zip(v.iter());
-+        for (phys_page, virt_page) in iter {
-+            let page_descriptor = self.page_descriptor_from(virt_page.as_ptr())?;
-+            if page_descriptor.is_valid() {
-+                return Err("Virtual page is already mapped");
-             }
++        let iter = phys_region.into_iter().zip(virt_region.into_iter());
++        for (phys_page_addr, virt_page_addr) in iter {
++            let new_desc = PageDescriptor::from_output_page_addr(phys_page_addr, attr);
++            let virt_page = virt_page_addr;
 +
-+            *page_descriptor = PageDescriptor::from_output_addr(phys_page.as_ptr(), &attr);
-         }
-
-         Ok(())
-     }
-
--    /// The translation table's base address to be used for programming the MMU.
--    pub fn phys_base_address(&self) -> u64 {
--        self.lvl2.phys_start_addr_u64()
-+    fn next_mmio_virt_page_slice(
-+        &mut self,
-+        num_pages: usize,
-+    ) -> Result<PageSliceDescriptor<Virtual>, &'static str> {
-+        assert!(self.initialized, "Translation tables not initialized");
-+
-+        if num_pages == 0 {
-+            return Err("num_pages == 0");
++            self.set_page_descriptor_from_page_addr(virt_page, &new_desc)?;
 +        }
 +
-+        if (self.cur_l3_mmio_index + num_pages) > 8191 {
-+            return Err("Not enough MMIO space left");
-+        }
-+
-+        let addr = Address::new(
-+            (Self::L2_MMIO_START_INDEX << Granule512MiB::SHIFT)
-+                | (self.cur_l3_mmio_index << Granule64KiB::SHIFT),
-+        );
-+        self.cur_l3_mmio_index += num_pages;
-+
-+        Ok(PageSliceDescriptor::from_addr(addr, num_pages))
-+    }
-+
-+    fn is_virt_page_slice_mmio(&self, virt_pages: &PageSliceDescriptor<Virtual>) -> bool {
-+        let start_addr = virt_pages.start_addr();
-+        let end_addr_inclusive = virt_pages.end_addr_inclusive();
-+
-+        for i in [start_addr, end_addr_inclusive].iter() {
-+            if (*i >= self.mmio_start_addr()) && (*i <= self.mmio_end_addr_inclusive()) {
-+                return true;
-+            }
-+        }
-+
-+        false
++        Ok(())
      }
  }
 
-@@ -292,6 +437,9 @@
+@@ -296,6 +379,9 @@
  //--------------------------------------------------------------------------------------------------
 
  #[cfg(test)]
@@ -828,8 +787,8 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu.rs 14
 +    memory::{mmu::TranslationGranule, Address, Physical},
  };
  use core::intrinsics::unlikely;
- use cortex_a::{barrier, regs::*};
-@@ -45,13 +45,6 @@
+ use cortex_a::{asm::barrier, registers::*};
+@@ -46,13 +46,6 @@
  // Global instances
  //--------------------------------------------------------------------------------------------------
 
@@ -843,7 +802,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu.rs 14
  static MMU: MemoryManagementUnit = MemoryManagementUnit;
 
  //--------------------------------------------------------------------------------------------------
-@@ -86,7 +79,7 @@
+@@ -87,7 +80,7 @@
 
      /// Configure various settings of stage 1 of the EL1 translation regime.
      fn configure_translation_control(&self) {
@@ -852,7 +811,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu.rs 14
 
          TCR_EL1.write(
              TCR_EL1::TBI0::Used
-@@ -118,7 +111,10 @@
+@@ -119,7 +112,10 @@
  use memory::mmu::MMUEnableError;
 
  impl memory::mmu::interface::MMU for MemoryManagementUnit {
@@ -864,22 +823,22 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu.rs 14
          if unlikely(self.is_enabled()) {
              return Err(MMUEnableError::AlreadyEnabled);
          }
-@@ -133,13 +129,8 @@
+@@ -134,13 +130,8 @@
          // Prepare the memory attribute indirection register.
          self.set_up_mair();
 
 -        // Populate translation tables.
 -        KERNEL_TABLES
 -            .populate_tt_entries()
--            .map_err(|e| MMUEnableError::Other(e))?;
+-            .map_err(MMUEnableError::Other)?;
 -
          // Set the "Translation Table Base Register".
 -        TTBR0_EL1.set_baddr(KERNEL_TABLES.phys_base_address());
-+        TTBR0_EL1.set_baddr(phys_tables_base_addr.into_usize() as u64);
++        TTBR0_EL1.set_baddr(phys_tables_base_addr.as_usize() as u64);
 
          self.configure_translation_control();
 
-@@ -162,22 +153,3 @@
+@@ -163,33 +154,3 @@
          SCTLR_EL1.matches_all(SCTLR_EL1::M::Enable)
      }
  }
@@ -891,12 +850,23 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/_arch/aarch64/memory/mmu.rs 14
 -#[cfg(test)]
 -mod tests {
 -    use super::*;
+-    use core::{cell::UnsafeCell, ops::Range};
 -    use test_macros::kernel_test;
 -
 -    /// Check if KERNEL_TABLES is in .bss.
 -    #[kernel_test]
 -    fn kernel_tables_in_bss() {
--        let bss_range = bsp::memory::bss_range_inclusive();
+-        extern "Rust" {
+-            static __bss_start: UnsafeCell<u64>;
+-            static __bss_end_exclusive: UnsafeCell<u64>;
+-        }
+-
+-        let bss_range = unsafe {
+-            Range {
+-                start: __bss_start.get(),
+-                end: __bss_end_exclusive.get(),
+-            }
+-        };
 -        let kernel_tables_addr = unsafe { &KERNEL_TABLES as *const _ as usize as *mut u64 };
 -
 -        assert!(bss_range.contains(&kernel_tables_addr));
@@ -914,10 +884,10 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gi
 +use crate::{
 +    bsp::device_driver::common::MMIODerefWrapper, exception, synchronization::InitStateLock,
 +};
- use register::{mmio::*, register_bitfields, register_structs};
-
- //--------------------------------------------------------------------------------------------------
-@@ -56,12 +58,13 @@
+ use tock_registers::{
+     interfaces::{Readable, Writeable},
+     register_bitfields, register_structs,
+@@ -60,12 +62,13 @@
 
  /// Representation of the GIC CPU interface.
  pub struct GICC {
@@ -932,7 +902,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gi
 
  impl GICC {
      /// Create an instance.
-@@ -71,10 +74,15 @@
+@@ -75,10 +78,15 @@
      /// - The user must ensure to provide a correct MMIO start address.
      pub const unsafe fn new(mmio_start_addr: usize) -> Self {
          Self {
@@ -949,7 +919,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gi
      /// Accept interrupts of any priority.
      ///
      /// Quoting the GICv2 Architecture Specification:
-@@ -87,7 +95,9 @@
+@@ -91,7 +99,9 @@
      /// - GICC MMIO registers are banked per CPU core. It is therefore safe to have `&self` instead
      ///   of `&mut self`.
      pub fn priority_accept_all(&self) {
@@ -960,7 +930,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gi
      }
 
      /// Enable the interface - start accepting IRQs.
-@@ -97,7 +107,9 @@
+@@ -101,7 +111,9 @@
      /// - GICC MMIO registers are banked per CPU core. It is therefore safe to have `&self` instead
      ///   of `&mut self`.
      pub fn enable(&self) {
@@ -971,7 +941,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gi
      }
 
      /// Extract the number of the highest-priority pending IRQ.
-@@ -113,7 +125,8 @@
+@@ -117,7 +129,8 @@
          &self,
          _ic: &exception::asynchronous::IRQContext<'irq_context>,
      ) -> usize {
@@ -981,7 +951,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gi
      }
 
      /// Complete handling of the currently active IRQ.
-@@ -132,6 +145,8 @@
+@@ -136,6 +149,8 @@
          irq_number: u32,
          _ic: &exception::asynchronous::IRQContext<'irq_context>,
      ) {
@@ -1005,9 +975,9 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gi
 +    state, synchronization,
 +    synchronization::{IRQSafeNullLock, InitStateLock},
  };
- use register::{mmio::*, register_bitfields, register_structs};
-
-@@ -79,7 +80,7 @@
+ use tock_registers::{
+     interfaces::{Readable, Writeable},
+@@ -83,7 +84,7 @@
      shared_registers: IRQSafeNullLock<SharedRegisters>,
 
      /// Access to banked registers is unguarded.
@@ -1016,7 +986,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gi
  }
 
  //--------------------------------------------------------------------------------------------------
-@@ -116,6 +117,7 @@
+@@ -120,6 +121,7 @@
  //--------------------------------------------------------------------------------------------------
  // Public Code
  //--------------------------------------------------------------------------------------------------
@@ -1024,7 +994,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gi
  use synchronization::interface::Mutex;
 
  impl GICD {
-@@ -127,10 +129,17 @@
+@@ -131,10 +133,17 @@
      pub const unsafe fn new(mmio_start_addr: usize) -> Self {
          Self {
              shared_registers: IRQSafeNullLock::new(SharedRegisters::new(mmio_start_addr)),
@@ -1043,7 +1013,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gi
      /// Use a banked ITARGETSR to retrieve the executing core's GIC target mask.
      ///
      /// Quoting the GICv2 Architecture Specification:
-@@ -138,7 +147,8 @@
+@@ -142,7 +151,8 @@
      ///   "GICD_ITARGETSR0 to GICD_ITARGETSR7 are read-only, and each field returns a value that
      ///    corresponds only to the processor reading the register."
      fn local_gic_target_mask(&self) -> u32 {
@@ -1053,7 +1023,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2/gi
      }
 
      /// Route all SPIs to the boot core and enable the distributor.
-@@ -177,10 +187,10 @@
+@@ -181,10 +191,10 @@
          // Check if we are handling a private or shared IRQ.
          match irq_num {
              // Private.
@@ -1116,27 +1086,25 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/arm/gicv2.rs
 -            gicc: gicc::GICC::new(gicc_mmio_start_addr),
 +            gicd_mmio_descriptor,
 +            gicc_mmio_descriptor,
-+            gicd: gicd::GICD::new(gicd_mmio_descriptor.start_addr().into_usize()),
-+            gicc: gicc::GICC::new(gicc_mmio_descriptor.start_addr().into_usize()),
++            gicd: gicd::GICD::new(gicd_mmio_descriptor.start_addr().as_usize()),
++            gicc: gicc::GICC::new(gicc_mmio_descriptor.start_addr().as_usize()),
 +            is_mmio_remapped: AtomicBool::new(false),
              handler_table: InitStateLock::new([None; Self::NUM_IRQS]),
          }
      }
-@@ -139,6 +152,22 @@
+@@ -139,6 +152,20 @@
      }
 
      unsafe fn init(&self) -> Result<(), &'static str> {
 +        let remapped = self.is_mmio_remapped.load(Ordering::Relaxed);
 +        if !remapped {
-+            let mut virt_addr;
-+
 +            // GICD
-+            virt_addr = memory::mmu::kernel_map_mmio("GICD", &self.gicd_mmio_descriptor)?;
-+            self.gicd.set_mmio(virt_addr.into_usize());
++            let mut virt_addr = memory::mmu::kernel_map_mmio("GICD", &self.gicd_mmio_descriptor)?;
++            self.gicd.set_mmio(virt_addr.as_usize());
 +
 +            // GICC
 +            virt_addr = memory::mmu::kernel_map_mmio("GICC", &self.gicc_mmio_descriptor)?;
-+            self.gicc.set_mmio(virt_addr.into_usize());
++            self.gicc.set_mmio(virt_addr.as_usize());
 +
 +            // Conclude remapping.
 +            self.is_mmio_remapped.store(true, Ordering::Relaxed);
@@ -1158,10 +1126,10 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
      synchronization::IRQSafeNullLock,
  };
 +use core::sync::atomic::{AtomicUsize, Ordering};
- use register::{mmio::*, register_bitfields, register_structs};
-
- //--------------------------------------------------------------------------------------------------
-@@ -117,6 +118,8 @@
+ use tock_registers::{
+     interfaces::{ReadWriteable, Writeable},
+     register_bitfields, register_structs,
+@@ -121,6 +122,8 @@
 
  /// Representation of the GPIO HW.
  pub struct GPIO {
@@ -1170,7 +1138,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
      inner: IRQSafeNullLock<GPIOInner>,
  }
 
-@@ -136,6 +139,19 @@
+@@ -140,6 +143,19 @@
          }
      }
 
@@ -1190,7 +1158,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
      /// Disable pull-up/down on pins 14 and 15.
      #[cfg(feature = "bsp_rpi3")]
      fn disable_pud_14_15_bcm2837(&mut self) {
-@@ -190,10 +206,12 @@
+@@ -194,10 +210,12 @@
      ///
      /// # Safety
      ///
@@ -1202,11 +1170,11 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
 -            inner: IRQSafeNullLock::new(GPIOInner::new(mmio_start_addr)),
 +            mmio_descriptor,
 +            virt_mmio_start_addr: AtomicUsize::new(0),
-+            inner: IRQSafeNullLock::new(GPIOInner::new(mmio_descriptor.start_addr().into_usize())),
++            inner: IRQSafeNullLock::new(GPIOInner::new(mmio_descriptor.start_addr().as_usize())),
          }
      }
 
-@@ -212,4 +230,26 @@
+@@ -216,4 +234,26 @@
      fn compatible(&self) -> &'static str {
          "BCM GPIO"
      }
@@ -1215,10 +1183,10 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
 +        let virt_addr = memory::mmu::kernel_map_mmio(self.compatible(), &self.mmio_descriptor)?;
 +
 +        self.inner
-+            .lock(|inner| inner.init(Some(virt_addr.into_usize())))?;
++            .lock(|inner| inner.init(Some(virt_addr.as_usize())))?;
 +
 +        self.virt_mmio_start_addr
-+            .store(virt_addr.into_usize(), Ordering::Relaxed);
++            .store(virt_addr.as_usize(), Ordering::Relaxed);
 +
 +        Ok(())
 +    }
@@ -1237,13 +1205,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_interrupt_controller/peripheral_ic.rs 14_virtual_mem_part2_mmio_remap/src/bsp/device_driver/bcm/bcm2xxx_interrupt_controller/peripheral_ic.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_interrupt_controller/peripheral_ic.rs
 +++ 14_virtual_mem_part2_mmio_remap/src/bsp/device_driver/bcm/bcm2xxx_interrupt_controller/peripheral_ic.rs
-@@ -2,12 +2,12 @@
- //
- // Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
-
--//! Peripheral Interrupt regsler Driver.
-+//! Peripheral Interrupt Controller Driver.
-
+@@ -7,7 +7,7 @@
  use super::{InterruptController, PendingIRQs, PeripheralIRQ};
  use crate::{
      bsp::device_driver::common::MMIODerefWrapper,
@@ -1251,8 +1213,8 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
 +    driver, exception, memory, synchronization,
      synchronization::{IRQSafeNullLock, InitStateLock},
  };
- use register::{mmio::*, register_structs};
-@@ -51,11 +51,13 @@
+ use tock_registers::{
+@@ -55,11 +55,13 @@
 
  /// Representation of the peripheral interrupt controller.
  pub struct PeripheralIC {
@@ -1267,7 +1229,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
 
      /// Stores registered IRQ handlers. Writable only during kernel init. RO afterwards.
      handler_table: InitStateLock<HandlerTable>,
-@@ -70,21 +72,26 @@
+@@ -74,21 +76,26 @@
      ///
      /// # Safety
      ///
@@ -1275,7 +1237,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
 -    pub const unsafe fn new(mmio_start_addr: usize) -> Self {
 +    /// - The user must ensure to provide correct MMIO descriptors.
 +    pub const unsafe fn new(mmio_descriptor: memory::mmu::MMIODescriptor) -> Self {
-+        let addr = mmio_descriptor.start_addr().into_usize();
++        let addr = mmio_descriptor.start_addr().as_usize();
 +
          Self {
 -            wo_registers: IRQSafeNullLock::new(WriteOnlyRegisters::new(mmio_start_addr)),
@@ -1301,7 +1263,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
      }
  }
 
-@@ -93,6 +100,24 @@
+@@ -97,6 +104,24 @@
  //------------------------------------------------------------------------------
  use synchronization::interface::{Mutex, ReadWriteEx};
 
@@ -1312,7 +1274,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
 +
 +    unsafe fn init(&self) -> Result<(), &'static str> {
 +        let virt_addr =
-+            memory::mmu::kernel_map_mmio(self.compatible(), &self.mmio_descriptor)?.into_usize();
++            memory::mmu::kernel_map_mmio(self.compatible(), &self.mmio_descriptor)?.as_usize();
 +
 +        self.wo_registers
 +            .lock(|regs| *regs = WriteOnlyRegisters::new(virt_addr));
@@ -1384,10 +1346,10 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
 +    fmt,
 +    sync::atomic::{AtomicUsize, Ordering},
 +};
- use register::{mmio::*, register_bitfields, register_structs};
-
- //--------------------------------------------------------------------------------------------------
-@@ -232,6 +235,8 @@
+ use tock_registers::{
+     interfaces::{Readable, Writeable},
+     register_bitfields, register_structs,
+@@ -231,6 +234,8 @@
 
  /// Representation of the UART.
  pub struct PL011Uart {
@@ -1396,7 +1358,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
      inner: IRQSafeNullLock<PL011UartInner>,
      irq_number: bsp::device_driver::IRQNumber,
  }
-@@ -271,7 +276,15 @@
+@@ -270,7 +275,15 @@
      /// genrated baud rate of `48_000_000 / (16 * 3.25) = 923_077`.
      ///
      /// Error = `((923_077 - 921_600) / 921_600) * 100 = 0.16modulo`.
@@ -1413,7 +1375,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
          // Execution can arrive here while there are still characters queued in the TX FIFO and
          // actively being sent out by the UART hardware. If the UART is turned off in this case,
          // those queued characters would be lost.
-@@ -313,6 +326,8 @@
+@@ -312,6 +325,8 @@
          self.registers
              .CR
              .write(CR::UARTEN::Enabled + CR::TXE::Enabled + CR::RXE::Enabled);
@@ -1422,7 +1384,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
      }
 
      /// Send a character.
-@@ -390,13 +405,18 @@
+@@ -389,13 +404,18 @@
      ///
      /// # Safety
      ///
@@ -1439,12 +1401,12 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
 +            mmio_descriptor,
 +            virt_mmio_start_addr: AtomicUsize::new(0),
 +            inner: IRQSafeNullLock::new(PL011UartInner::new(
-+                mmio_descriptor.start_addr().into_usize(),
++                mmio_descriptor.start_addr().as_usize(),
 +            )),
              irq_number,
          }
      }
-@@ -413,7 +433,13 @@
+@@ -412,7 +432,13 @@
      }
 
      unsafe fn init(&self) -> Result<(), &'static str> {
@@ -1452,14 +1414,14 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/device_driver/bcm/bcm2xxx_
 +        let virt_addr = memory::mmu::kernel_map_mmio(self.compatible(), &self.mmio_descriptor)?;
 +
 +        self.inner
-+            .lock(|inner| inner.init(Some(virt_addr.into_usize())))?;
++            .lock(|inner| inner.init(Some(virt_addr.as_usize())))?;
 +
 +        self.virt_mmio_start_addr
-+            .store(virt_addr.into_usize(), Ordering::Relaxed);
++            .store(virt_addr.as_usize(), Ordering::Relaxed);
 
          Ok(())
      }
-@@ -432,6 +458,16 @@
+@@ -431,6 +457,16 @@
 
          Ok(())
      }
@@ -1497,9 +1459,9 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/console.rs 14_
 -    let mut panic_uart = device_driver::PanicUart::new(memory::map::mmio::PL011_UART_START);
 +    use driver::interface::DeviceDriver;
 
-+    let mut panic_gpio = device_driver::PanicGPIO::new(memory::map::mmio::GPIO_START.into_usize());
++    let mut panic_gpio = device_driver::PanicGPIO::new(memory::map::mmio::GPIO_START.as_usize());
 +    let mut panic_uart =
-+        device_driver::PanicUart::new(memory::map::mmio::PL011_UART_START.into_usize());
++        device_driver::PanicUart::new(memory::map::mmio::PL011_UART_START.as_usize());
 +
 +    // If remapping of the driver's MMIO already happened, take the remapped start address.
 +    // Otherwise, take a chance with the default physical address.
@@ -1543,55 +1505,45 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/driver.rs 14_v
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/link.ld 14_virtual_mem_part2_mmio_remap/src/bsp/raspberrypi/link.ld
 --- 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/link.ld
 +++ 14_virtual_mem_part2_mmio_remap/src/bsp/raspberrypi/link.ld
-@@ -17,11 +17,6 @@
- SECTIONS
- {
-     . =  __rpi_load_addr;
--                                        /*   ^             */
--                                        /*   | stack       */
--                                        /*   | growth      */
--                                        /*   | direction   */
--   __boot_core_stack_end_exclusive = .; /*   |             */
-
-     /***********************************************************************************************
-     * Code + RO Data + Global Offset Table
-@@ -44,6 +39,7 @@
+@@ -38,7 +38,7 @@
+     ***********************************************************************************************/
+     .boot_core_stack (NOLOAD) :
+     {
+-                                             /*   ^             */
++        __boot_core_stack_start = .;         /*   ^             */
+                                              /*   | stack       */
+         . += __rpi_phys_binary_load_addr;    /*   | growth      */
+                                              /*   | direction   */
+@@ -68,6 +68,7 @@
      /***********************************************************************************************
      * Data + BSS
      ***********************************************************************************************/
-+    __rw_start = .;
-     .data : { *(.data*) } :segment_rw
++    __data_start = .;
+     .data : { *(.data*) } :segment_data
 
-     /* Section is zeroed in u64 chunks, align start and end to 8 bytes */
-@@ -56,4 +52,23 @@
-         . += 8; /* Fill for the bss == 0 case, so that __bss_start <= __bss_end_inclusive holds */
-         __bss_end_inclusive = . - 8;
-     } :NONE
+     /* Section is zeroed in pairs of u64. Align start and end to 16 bytes */
+@@ -78,4 +79,16 @@
+         . = ALIGN(16);
+         __bss_end_exclusive = .;
+     } :segment_data
 +
-+    . = ALIGN(64K); /* Align to page boundary */
-+    __rw_end_exclusive = .;
-+
-+    /***********************************************************************************************
-+    * Guard Page between boot core stack and data
-+    ***********************************************************************************************/
-+    __boot_core_stack_guard_page_start = .;
-+    . += 64K;
-+    __boot_core_stack_guard_page_end_exclusive = .;
++    . = ALIGN(PAGE_SIZE);
++    __data_end_exclusive = .;
 +
 +    /***********************************************************************************************
-+    * Boot Core Stack
++    * MMIO Remap Reserved
 +    ***********************************************************************************************/
-+    __boot_core_stack_start = .;         /*   ^             */
-+                                         /*   | stack       */
-+    . += 512K;                           /*   | growth      */
-+                                         /*   | direction   */
-+    __boot_core_stack_end_exclusive = .; /*   |             */
++    __mmio_remap_start = .;
++    . += 8 * 1024 * 1024;
++    __mmio_remap_end_exclusive = .;
++
++    ASSERT((. & PAGE_MASK) == 0, "MMIO remap reservation is not page aligned")
  }
 
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 14_virtual_mem_part2_mmio_remap/src/bsp/raspberrypi/memory/mmu.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs
 +++ 14_virtual_mem_part2_mmio_remap/src/bsp/raspberrypi/memory/mmu.rs
-@@ -4,70 +4,164 @@
+@@ -4,70 +4,163 @@
 
  //! BSP Memory Management Unit.
 
@@ -1599,12 +1551,10 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
 -use crate::memory::mmu::*;
 -use core::ops::RangeInclusive;
 +use crate::{
-+    common,
 +    memory::{
-+        mmu as generic_mmu,
 +        mmu::{
-+            AccessPermissions, AddressSpace, AssociatedTranslationTable, AttributeFields,
-+            MemAttributes, Page, PageSliceDescriptor, TranslationGranule,
++            self as generic_mmu, AccessPermissions, AddressSpace, AssociatedTranslationTable,
++            AttributeFields, MemAttributes, MemoryRegion, PageAddress, TranslationGranule,
 +        },
 +        Physical, Virtual,
 +    },
@@ -1629,7 +1579,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
 +pub type KernelGranule = TranslationGranule<{ 64 * 1024 }>;
 +
 +/// The kernel's virtual address space defined by this BSP.
-+pub type KernelVirtAddrSpace = AddressSpace<{ 8 * 1024 * 1024 * 1024 }>;
++pub type KernelVirtAddrSpace = AddressSpace<{ 1024 * 1024 * 1024 }>;
 
 -const NUM_MEM_RANGES: usize = 2;
 +//--------------------------------------------------------------------------------------------------
@@ -1646,7 +1596,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
 -    [
 -        TranslationDescriptor {
 -            name: "Kernel code and RO data",
--            virtual_range: rx_range_inclusive,
+-            virtual_range: code_range_inclusive,
 -            physical_range_translation: Translation::Identity,
 -            attribute_fields: AttributeFields {
 -                mem_attributes: MemAttributes::CacheableDRAM,
@@ -1677,10 +1627,10 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
  // Private Code
  //--------------------------------------------------------------------------------------------------
 
--fn rx_range_inclusive() -> RangeInclusive<usize> {
+-fn code_range_inclusive() -> RangeInclusive<usize> {
 -    // Notice the subtraction to turn the exclusive end into an inclusive end.
 -    #[allow(clippy::range_minus_one)]
--    RangeInclusive::new(super::rx_start(), super::rx_end_exclusive() - 1)
+-    RangeInclusive::new(super::code_start(), super::code_end_exclusive() - 1)
 +/// Helper function for calculating the number of pages the given parameter spans.
 +const fn size_to_num_pages(size: usize) -> usize {
 +    assert!(size > 0);
@@ -1689,44 +1639,50 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
 +    size >> KernelGranule::SHIFT
 +}
 +
-+/// The Read+Execute (RX) pages of the kernel binary.
-+fn virt_rx_page_desc() -> PageSliceDescriptor<Virtual> {
-+    let num_pages = size_to_num_pages(super::rx_size());
++/// The code pages of the kernel binary.
++fn virt_code_region() -> MemoryRegion<Virtual> {
++    let num_pages = size_to_num_pages(super::code_size());
 +
-+    PageSliceDescriptor::from_addr(super::virt_rx_start(), num_pages)
++    let start_page_addr = super::virt_code_start();
++    let end_exclusive_page_addr = start_page_addr.checked_offset(num_pages as isize).unwrap();
++
++    MemoryRegion::new(start_page_addr, end_exclusive_page_addr)
 +}
 +
-+/// The Read+Write (RW) pages of the kernel binary.
-+fn virt_rw_page_desc() -> PageSliceDescriptor<Virtual> {
-+    let num_pages = size_to_num_pages(super::rw_size());
++/// The data pages of the kernel binary.
++fn virt_data_region() -> MemoryRegion<Virtual> {
++    let num_pages = size_to_num_pages(super::data_size());
 +
-+    PageSliceDescriptor::from_addr(super::virt_rw_start(), num_pages)
++    let start_page_addr = super::virt_data_start();
++    let end_exclusive_page_addr = start_page_addr.checked_offset(num_pages as isize).unwrap();
++
++    MemoryRegion::new(start_page_addr, end_exclusive_page_addr)
 +}
 +
-+/// The boot core's stack.
-+fn virt_boot_core_stack_page_desc() -> PageSliceDescriptor<Virtual> {
++/// The boot core stack pages.
++fn virt_boot_core_stack_region() -> MemoryRegion<Virtual> {
 +    let num_pages = size_to_num_pages(super::boot_core_stack_size());
 +
-+    PageSliceDescriptor::from_addr(super::virt_boot_core_stack_start(), num_pages)
-+}
++    let start_page_addr = super::virt_boot_core_stack_start();
++    let end_exclusive_page_addr = start_page_addr.checked_offset(num_pages as isize).unwrap();
 +
-+// The binary is still identity mapped, so we don't need to convert in the following.
-+
-+/// The Read+Execute (RX) pages of the kernel binary.
-+fn phys_rx_page_desc() -> PageSliceDescriptor<Physical> {
-+    virt_rx_page_desc().into()
++    MemoryRegion::new(start_page_addr, end_exclusive_page_addr)
  }
 
 -fn mmio_range_inclusive() -> RangeInclusive<usize> {
 -    RangeInclusive::new(memory_map::mmio::START, memory_map::mmio::END_INCLUSIVE)
-+/// The Read+Write (RW) pages of the kernel binary.
-+fn phys_rw_page_desc() -> PageSliceDescriptor<Physical> {
-+    virt_rw_page_desc().into()
-+}
++// The binary is still identity mapped, so use this trivial conversion function for mapping below.
 +
-+/// The boot core's stack.
-+fn phys_boot_core_stack_page_desc() -> PageSliceDescriptor<Physical> {
-+    virt_boot_core_stack_page_desc().into()
++fn kernel_virt_to_phys_region(virt_region: MemoryRegion<Virtual>) -> MemoryRegion<Physical> {
++    MemoryRegion::new(
++        PageAddress::from(virt_region.start_page_addr().into_inner().as_usize()),
++        PageAddress::from(
++            virt_region
++                .end_exclusive_page_addr()
++                .into_inner()
++                .as_usize(),
++        ),
++    )
  }
 
  //--------------------------------------------------------------------------------------------------
@@ -1741,19 +1697,14 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
 +    &KERNEL_TABLES
 +}
 +
-+/// The boot core's stack guard page.
-+pub fn virt_boot_core_stack_guard_page_desc() -> PageSliceDescriptor<Virtual> {
-+    let num_pages = size_to_num_pages(super::boot_core_stack_guard_page_size());
++/// The MMIO remap pages.
++pub fn virt_mmio_remap_region() -> MemoryRegion<Virtual> {
++    let num_pages = size_to_num_pages(super::mmio_remap_size());
 +
-+    PageSliceDescriptor::from_addr(super::virt_boot_core_stack_guard_page_start(), num_pages)
-+}
++    let start_page_addr = super::virt_mmio_remap_start();
++    let end_exclusive_page_addr = start_page_addr.checked_offset(num_pages as isize).unwrap();
 +
-+/// Pointer to the last page of the physical address space.
-+pub fn phys_addr_space_end_page() -> *const Page<Physical> {
-+    common::align_down(
-+        super::phys_addr_space_end().into_usize(),
-+        KernelGranule::SIZE,
-+    ) as *const Page<_>
++    MemoryRegion::new(start_page_addr, end_exclusive_page_addr)
 +}
 +
 +/// Map the kernel binary.
@@ -1762,21 +1713,10 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
 +///
 +/// - Any miscalculation or attribute error will likely be fatal. Needs careful manual checking.
 +pub unsafe fn kernel_map_binary() -> Result<(), &'static str> {
-+    generic_mmu::kernel_map_pages_at(
-+        "Kernel code and RO data",
-+        &virt_rx_page_desc(),
-+        &phys_rx_page_desc(),
-+        &AttributeFields {
-+            mem_attributes: MemAttributes::CacheableDRAM,
-+            acc_perms: AccessPermissions::ReadOnly,
-+            execute_never: false,
-+        },
-+    )?;
-+
-+    generic_mmu::kernel_map_pages_at(
-+        "Kernel data and bss",
-+        &virt_rw_page_desc(),
-+        &phys_rw_page_desc(),
++    generic_mmu::kernel_map_at(
++        "Kernel boot-core stack",
++        &virt_boot_core_stack_region(),
++        &kernel_virt_to_phys_region(virt_boot_core_stack_region()),
 +        &AttributeFields {
 +            mem_attributes: MemAttributes::CacheableDRAM,
 +            acc_perms: AccessPermissions::ReadWrite,
@@ -1784,10 +1724,21 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
 +        },
 +    )?;
 +
-+    generic_mmu::kernel_map_pages_at(
-+        "Kernel boot-core stack",
-+        &virt_boot_core_stack_page_desc(),
-+        &phys_boot_core_stack_page_desc(),
++    generic_mmu::kernel_map_at(
++        "Kernel code and RO data",
++        &virt_code_region(),
++        &kernel_virt_to_phys_region(virt_code_region()),
++        &AttributeFields {
++            mem_attributes: MemAttributes::CacheableDRAM,
++            acc_perms: AccessPermissions::ReadOnly,
++            execute_never: false,
++        },
++    )?;
++
++    generic_mmu::kernel_map_at(
++        "Kernel data and bss",
++        &virt_data_region(),
++        &kernel_virt_to_phys_region(virt_data_region()),
 +        &AttributeFields {
 +            mem_attributes: MemAttributes::CacheableDRAM,
 +            acc_perms: AccessPermissions::ReadWrite,
@@ -1799,7 +1750,13 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
  }
 
  //--------------------------------------------------------------------------------------------------
-@@ -82,14 +176,18 @@
+@@ -77,38 +170,60 @@
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    use core::{cell::UnsafeCell, ops::Range};
+     use test_macros::kernel_test;
+
      /// Check alignment of the kernel's virtual memory layout sections.
      #[kernel_test]
      fn virt_mem_layout_sections_are_64KiB_aligned() {
@@ -1808,24 +1765,26 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
 -        for i in LAYOUT.inner().iter() {
 -            let start: usize = *(i.virtual_range)().start();
 -            let end: usize = *(i.virtual_range)().end() + 1;
+-
+-            assert_eq!(start modulo SIXTYFOUR_KIB, 0);
+-            assert_eq!(end modulo SIXTYFOUR_KIB, 0);
+-            assert!(end >= start);
 +        for i in [
-+            virt_rx_page_desc,
-+            virt_rw_page_desc,
-+            virt_boot_core_stack_page_desc,
++            virt_boot_core_stack_region,
++            virt_code_region,
++            virt_data_region,
 +        ]
 +        .iter()
 +        {
-+            let start: usize = i().start_addr().into_usize();
-+            let end: usize = i().end_addr().into_usize();
-
--            assert_eq!(start modulo SIXTYFOUR_KIB, 0);
--            assert_eq!(end modulo SIXTYFOUR_KIB, 0);
-+            assert_eq!(start modulo KernelGranule::SIZE, 0);
-+            assert_eq!(end modulo KernelGranule::SIZE, 0);
-             assert!(end >= start);
++            let start = i().start_page_addr().into_inner();
++            let end_exclusive = i().end_exclusive_page_addr().into_inner();
++
++            assert!(start.is_page_aligned());
++            assert!(end_exclusive.is_page_aligned());
++            assert!(end_exclusive >= start);
          }
      }
-@@ -97,18 +195,28 @@
+
      /// Ensure the kernel's virtual memory layout is free of overlaps.
      #[kernel_test]
      fn virt_mem_layout_has_no_overlaps() {
@@ -1841,17 +1800,14 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
 -                assert!(!second_range().contains(first_range().start()));
 -                assert!(!second_range().contains(first_range().end()));
 +        let layout = [
-+            virt_rx_page_desc(),
-+            virt_rw_page_desc(),
-+            virt_boot_core_stack_page_desc(),
++            virt_boot_core_stack_region(),
++            virt_code_region(),
++            virt_data_region(),
 +        ];
 +
 +        for (i, first_range) in layout.iter().enumerate() {
 +            for second_range in layout.iter().skip(i + 1) {
-+                assert!(!first_range.contains(second_range.start_addr()));
-+                assert!(!first_range.contains(second_range.end_addr_inclusive()));
-+                assert!(!second_range.contains(first_range.start_addr()));
-+                assert!(!second_range.contains(first_range.end_addr_inclusive()));
++                assert!(!first_range.overlaps(second_range))
              }
          }
      }
@@ -1859,7 +1815,17 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
 +    /// Check if KERNEL_TABLES is in .bss.
 +    #[kernel_test]
 +    fn kernel_tables_in_bss() {
-+        let bss_range = super::super::bss_range_inclusive();
++        extern "Rust" {
++            static __bss_start: UnsafeCell<u64>;
++            static __bss_end_exclusive: UnsafeCell<u64>;
++        }
++
++        let bss_range = unsafe {
++            Range {
++                start: __bss_start.get(),
++                end: __bss_end_exclusive.get(),
++            }
++        };
 +        let kernel_tables_addr = &KERNEL_TABLES as *const _ as usize as *mut u64;
 +
 +        assert!(bss_range.contains(&kernel_tables_addr));
@@ -1869,65 +1835,86 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory/mmu.rs 
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory.rs 14_virtual_mem_part2_mmio_remap/src/bsp/raspberrypi/memory.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory.rs
 +++ 14_virtual_mem_part2_mmio_remap/src/bsp/raspberrypi/memory.rs
-@@ -3,9 +3,40 @@
- // Copyright (c) 2018-2021 Andre Richter <andre.o.richter@gmail.com>
-
- //! BSP Memory Management.
+@@ -10,27 +10,59 @@
+ //! as the boot core's stack.
+ //!
+ //! +---------------------------------------+
+-//! |                                       | 0x0
++//! |                                       | boot_core_stack_start @ 0x0
+ //! |                                       |                                ^
+ //! | Boot-core Stack                       |                                | stack
+ //! |                                       |                                | growth
+ //! |                                       |                                | direction
+ //! +---------------------------------------+
+-//! |                                       | code_start @ 0x8_0000
++//! |                                       | code_start @ 0x8_0000 == boot_core_stack_end_exclusive
+ //! | .text                                 |
+ //! | .rodata                               |
+ //! | .got                                  |
+ //! |                                       |
+ //! +---------------------------------------+
+-//! |                                       | code_end_exclusive
++//! |                                       | data_start == code_end_exclusive
+ //! | .data                                 |
+ //! | .bss                                  |
+ //! |                                       |
+ //! +---------------------------------------+
++//! |                                       | data_end_exclusive
+ //! |                                       |
 +//!
-+//! The physical memory layout after the kernel has been loaded by the Raspberry's firmware, which
-+//! copies the binary to 0x8_0000:
 +//!
-+//! +---------------------------------------------+
-+//! |                                             |
-+//! | Unmapped                                    |
-+//! |                                             |
-+//! +---------------------------------------------+
-+//! |                                             | rx_start @ 0x8_0000
-+//! | .text                                       |
-+//! | .rodata                                     |
-+//! | .got                                        |
-+//! |                                             | rx_end_inclusive
-+//! +---------------------------------------------+
-+//! |                                             | rw_start == rx_end
-+//! | .data                                       |
-+//! | .bss                                        |
-+//! |                                             | rw_end_inclusive
-+//! +---------------------------------------------+
-+//! |                                             | rw_end
-+//! | Unmapped Boot-core Stack Guard Page         |
-+//! |                                             |
-+//! +---------------------------------------------+
-+//! |                                             | boot_core_stack_start          ^
-+//! |                                             |                                | stack
-+//! | Boot-core Stack                             |                                | growth
-+//! |                                             |                                | direction
-+//! |                                             | boot_core_stack_end_inclusive  |
-+//! +---------------------------------------------+
-
++//!
++//!
++//!
++//! The virtual memory layout is as follows:
++//!
++//! +---------------------------------------+
++//! |                                       | boot_core_stack_start @ 0x0
++//! |                                       |                                ^
++//! | Boot-core Stack                       |                                | stack
++//! |                                       |                                | growth
++//! |                                       |                                | direction
++//! +---------------------------------------+
++//! |                                       | code_start @ 0x8_0000 == boot_core_stack_end_exclusive
++//! | .text                                 |
++//! | .rodata                               |
++//! | .got                                  |
++//! |                                       |
++//! +---------------------------------------+
++//! |                                       | data_start == code_end_exclusive
++//! | .data                                 |
++//! | .bss                                  |
++//! |                                       |
++//! +---------------------------------------+
++//! |                                       |  mmio_remap_start == data_end_exclusive
++//! | VA region for MMIO remapping          |
++//! |                                       |
++//! +---------------------------------------+
++//! |                                       |  mmio_remap_end_exclusive
+ //! |                                       |
  pub mod mmu;
 
-+use crate::memory::{Address, Physical, Virtual};
- use core::{cell::UnsafeCell, ops::RangeInclusive};
++use crate::memory::{mmu::PageAddress, Address, Physical, Virtual};
+ use core::cell::UnsafeCell;
 
  //--------------------------------------------------------------------------------------------------
-@@ -17,8 +48,16 @@
-     static __rx_start: UnsafeCell<()>;
-     static __rx_end_exclusive: UnsafeCell<()>;
-
-+    static __rw_start: UnsafeCell<()>;
-     static __bss_start: UnsafeCell<u64>;
-     static __bss_end_inclusive: UnsafeCell<u64>;
-+    static __rw_end_exclusive: UnsafeCell<()>;
+@@ -41,6 +73,15 @@
+ extern "Rust" {
+     static __code_start: UnsafeCell<()>;
+     static __code_end_exclusive: UnsafeCell<()>;
++
++    static __data_start: UnsafeCell<()>;
++    static __data_end_exclusive: UnsafeCell<()>;
++
++    static __mmio_remap_start: UnsafeCell<()>;
++    static __mmio_remap_end_exclusive: UnsafeCell<()>;
 +
 +    static __boot_core_stack_start: UnsafeCell<()>;
 +    static __boot_core_stack_end_exclusive: UnsafeCell<()>;
-+
-+    static __boot_core_stack_guard_page_start: UnsafeCell<()>;
-+    static __boot_core_stack_guard_page_end_exclusive: UnsafeCell<()>;
  }
 
  //--------------------------------------------------------------------------------------------------
-@@ -28,35 +67,26 @@
+@@ -50,35 +91,26 @@
  /// The board's physical memory map.
  #[rustfmt::skip]
  pub(super) mod map {
@@ -1977,7 +1964,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory.rs 14_v
      }
 
      /// Physical devices.
-@@ -64,13 +94,22 @@
+@@ -86,13 +118,22 @@
      pub mod mmio {
          use super::*;
 
@@ -2006,49 +1993,69 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory.rs 14_v
  }
 
  //--------------------------------------------------------------------------------------------------
-@@ -83,18 +122,69 @@
+@@ -105,15 +146,76 @@
  ///
  /// - Value is provided by the linker script and must be trusted as-is.
  #[inline(always)]
--fn rx_start() -> usize {
--    unsafe { __rx_start.get() as usize }
-+fn virt_rx_start() -> Address<Virtual> {
-+    Address::new(unsafe { __rx_start.get() as usize })
- }
-
--/// Exclusive end address of the Read+Execute (RX) range.
-+/// Size of the Read+Execute (RX) range.
- ///
- /// # Safety
- ///
- /// - Value is provided by the linker script and must be trusted as-is.
- #[inline(always)]
--fn rx_end_exclusive() -> usize {
--    unsafe { __rx_end_exclusive.get() as usize }
-+fn rx_size() -> usize {
-+    unsafe { (__rx_end_exclusive.get() as usize) - (__rx_start.get() as usize) }
+-fn code_start() -> usize {
+-    unsafe { __code_start.get() as usize }
++fn virt_code_start() -> PageAddress<Virtual> {
++    PageAddress::from(unsafe { __code_start.get() as usize })
 +}
 +
-+/// Start address of the Read+Write (RW) range.
-+#[inline(always)]
-+fn virt_rw_start() -> Address<Virtual> {
-+    Address::new(unsafe { __rw_start.get() as usize })
-+}
-+
-+/// Size of the Read+Write (RW) range.
++/// Size of the code segment.
 +///
 +/// # Safety
 +///
 +/// - Value is provided by the linker script and must be trusted as-is.
 +#[inline(always)]
-+fn rw_size() -> usize {
-+    unsafe { (__rw_end_exclusive.get() as usize) - (__rw_start.get() as usize) }
++fn code_size() -> usize {
++    unsafe { (__code_end_exclusive.get() as usize) - (__code_start.get() as usize) }
+ }
+
+-/// Exclusive end page address of the code segment.
++/// Start page address of the data segment.
++#[inline(always)]
++fn virt_data_start() -> PageAddress<Virtual> {
++    PageAddress::from(unsafe { __data_start.get() as usize })
 +}
 +
-+/// Start address of the boot core's stack.
++/// Size of the data segment.
++///
+ /// # Safety
+ ///
+ /// - Value is provided by the linker script and must be trusted as-is.
+ #[inline(always)]
+-fn code_end_exclusive() -> usize {
+-    unsafe { __code_end_exclusive.get() as usize }
++fn data_size() -> usize {
++    unsafe { (__data_end_exclusive.get() as usize) - (__data_start.get() as usize) }
++}
++
++/// Start page address of the MMIO remap reservation.
++///
++/// # Safety
++///
++/// - Value is provided by the linker script and must be trusted as-is.
 +#[inline(always)]
-+fn virt_boot_core_stack_start() -> Address<Virtual> {
-+    Address::new(unsafe { __boot_core_stack_start.get() as usize })
++fn virt_mmio_remap_start() -> PageAddress<Virtual> {
++    PageAddress::from(unsafe { __mmio_remap_start.get() as usize })
++}
++
++/// Size of the MMIO remap reservation.
++///
++/// # Safety
++///
++/// - Value is provided by the linker script and must be trusted as-is.
++#[inline(always)]
++fn mmio_remap_size() -> usize {
++    unsafe { (__mmio_remap_end_exclusive.get() as usize) - (__mmio_remap_start.get() as usize) }
++}
++
++/// Start page address of the boot core's stack.
++#[inline(always)]
++fn virt_boot_core_stack_start() -> PageAddress<Virtual> {
++    PageAddress::from(unsafe { __boot_core_stack_start.get() as usize })
 +}
 +
 +/// Size of the boot core's stack.
@@ -2059,28 +2066,15 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi/memory.rs 14_v
 +    }
 +}
 +
-+/// Start address of the boot core's stack guard page.
-+#[inline(always)]
-+fn virt_boot_core_stack_guard_page_start() -> Address<Virtual> {
-+    Address::new(unsafe { __boot_core_stack_guard_page_start.get() as usize })
-+}
-+
-+/// Size of the boot core's stack guard page.
-+#[inline(always)]
-+fn boot_core_stack_guard_page_size() -> usize {
-+    unsafe {
-+        (__boot_core_stack_guard_page_end_exclusive.get() as usize)
-+            - (__boot_core_stack_guard_page_start.get() as usize)
-+    }
-+}
++//--------------------------------------------------------------------------------------------------
++// Public Code
++//--------------------------------------------------------------------------------------------------
 +
 +/// Exclusive end address of the physical address space.
 +#[inline(always)]
-+fn phys_addr_space_end() -> Address<Physical> {
-+    map::END
++pub fn phys_addr_space_end_exclusive_addr() -> PageAddress<Physical> {
++    PageAddress::from(map::END)
  }
-
- //--------------------------------------------------------------------------------------------------
 
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi.rs 14_virtual_mem_part2_mmio_remap/src/bsp/raspberrypi.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi.rs
@@ -2134,10 +2128,10 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/bsp/raspberrypi.rs 14_virtual_
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/common.rs 14_virtual_mem_part2_mmio_remap/src/common.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/common.rs
 +++ 14_virtual_mem_part2_mmio_remap/src/common.rs
-@@ -0,0 +1,21 @@
+@@ -0,0 +1,29 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! General purpose code.
 +
@@ -2155,6 +2149,14 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/common.rs 14_virtual_mem_part2
 +    assert!(alignment.is_power_of_two());
 +
 +    value & !(alignment - 1)
++}
++
++/// Align up.
++#[inline(always)]
++pub const fn align_up(value: usize, alignment: usize) -> usize {
++    assert!(alignment.is_power_of_two());
++
++    (value + alignment - 1) & !(alignment - 1)
 +}
 
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/driver.rs 14_virtual_mem_part2_mmio_remap/src/driver.rs
@@ -2204,16 +2206,18 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/driver.rs 14_virtual_mem_part2
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/lib.rs 14_virtual_mem_part2_mmio_remap/src/lib.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/lib.rs
 +++ 14_virtual_mem_part2_mmio_remap/src/lib.rs
-@@ -111,6 +111,8 @@
- #![allow(clippy::upper_case_acronyms)]
- #![allow(incomplete_features)]
- #![feature(asm)]
-+#![feature(const_evaluatable_checked)]
-+#![feature(const_fn)]
- #![feature(const_fn_fn_ptr_basics)]
- #![feature(const_generics)]
- #![feature(const_panic)]
-@@ -132,6 +134,7 @@
+@@ -113,8 +113,10 @@
+ #![feature(const_fn_trait_bound)]
+ #![feature(core_intrinsics)]
+ #![feature(format_args_nl)]
++#![feature(generic_const_exprs)]
+ #![feature(linkage)]
+ #![feature(panic_info_message)]
++#![feature(step_trait)]
+ #![feature(trait_alias)]
+ #![no_std]
+ // Testing
+@@ -127,6 +129,7 @@
  mod synchronization;
 
  pub mod bsp;
@@ -2221,11 +2225,19 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/lib.rs 14_virtual_mem_part2_mm
  pub mod console;
  pub mod cpu;
  pub mod driver;
+@@ -179,6 +182,7 @@
+ #[no_mangle]
+ unsafe fn kernel_init() -> ! {
+     exception::handling_init();
++    memory::mmu::post_enable_init();
+     bsp::console::qemu_bring_up_console();
+
+     test_main();
 
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/main.rs 14_virtual_mem_part2_mmio_remap/src/main.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/main.rs
 +++ 14_virtual_mem_part2_mmio_remap/src/main.rs
-@@ -25,21 +25,39 @@
+@@ -25,21 +25,41 @@
  #[no_mangle]
  unsafe fn kernel_init() -> ! {
      use driver::interface::DriverManager;
@@ -2244,6 +2256,8 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/main.rs 14_virtual_mem_part2_m
 +        panic!("Enabling MMU failed: {}", e);
 +    }
 +    // Printing will silently fail from here on, because the driver's MMIO is not remapped yet.
++
++    memory::mmu::post_enable_init();
 +
 +    // Bring up the drivers needed for printing first.
 +    for i in bsp::driver::driver_manager()
@@ -2271,7 +2285,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/main.rs 14_virtual_mem_part2_m
 
      // Let device drivers register and enable their handlers with the interrupt controller.
      for i in bsp::driver::driver_manager().all_device_drivers() {
-@@ -66,8 +84,8 @@
+@@ -66,8 +86,8 @@
      info!("{}", libkernel::version());
      info!("Booting on: {}", bsp::board_name());
 
@@ -2283,21 +2297,96 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/main.rs 14_virtual_mem_part2_m
      let (_, privilege_level) = exception::current_privilege_level();
      info!("Current privilege level: {}", privilege_level);
 
+diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/alloc.rs 14_virtual_mem_part2_mmio_remap/src/memory/mmu/alloc.rs
+--- 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/alloc.rs
++++ 14_virtual_mem_part2_mmio_remap/src/memory/mmu/alloc.rs
+@@ -0,0 +1,70 @@
++// SPDX-License-Identifier: MIT OR Apache-2.0
++//
++// Copyright (c) 2021-2022 Andre Richter <andre.o.richter@gmail.com>
++
++//! Allocation.
++
++use super::MemoryRegion;
++use crate::{
++    memory::{AddressType, Virtual},
++    synchronization::IRQSafeNullLock,
++    warn,
++};
++use core::num::NonZeroUsize;
++
++//--------------------------------------------------------------------------------------------------
++// Public Definitions
++//--------------------------------------------------------------------------------------------------
++
++/// A page allocator that can be lazyily initialized.
++pub struct PageAllocator<ATYPE: AddressType> {
++    pool: Option<MemoryRegion<ATYPE>>,
++}
++
++//--------------------------------------------------------------------------------------------------
++// Global instances
++//--------------------------------------------------------------------------------------------------
++
++static KERNEL_MMIO_VA_ALLOCATOR: IRQSafeNullLock<PageAllocator<Virtual>> =
++    IRQSafeNullLock::new(PageAllocator::new());
++
++//--------------------------------------------------------------------------------------------------
++// Public Code
++//--------------------------------------------------------------------------------------------------
++
++/// Return a reference to the kernel's MMIO virtual address allocator.
++pub fn kernel_mmio_va_allocator() -> &'static IRQSafeNullLock<PageAllocator<Virtual>> {
++    &KERNEL_MMIO_VA_ALLOCATOR
++}
++
++impl<ATYPE: AddressType> PageAllocator<ATYPE> {
++    /// Create an instance.
++    pub const fn new() -> Self {
++        Self { pool: None }
++    }
++
++    /// Initialize the allocator.
++    pub fn initialize(&mut self, pool: MemoryRegion<ATYPE>) {
++        if self.pool.is_some() {
++            warn!("Already initialized");
++            return;
++        }
++
++        self.pool = Some(pool);
++    }
++
++    /// Allocate a number of pages.
++    pub fn alloc(
++        &mut self,
++        num_requested_pages: NonZeroUsize,
++    ) -> Result<MemoryRegion<ATYPE>, &'static str> {
++        if self.pool.is_none() {
++            return Err("Allocator not initialized");
++        }
++
++        self.pool
++            .as_mut()
++            .unwrap()
++            .take_first_n_pages(num_requested_pages)
++    }
++}
+
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/mapping_record.rs 14_virtual_mem_part2_mmio_remap/src/memory/mmu/mapping_record.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/mapping_record.rs
 +++ 14_virtual_mem_part2_mmio_remap/src/memory/mmu/mapping_record.rs
-@@ -0,0 +1,216 @@
+@@ -0,0 +1,233 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! A record of mapped pages.
 +
 +use super::{
-+    AccessPermissions, Address, AttributeFields, MMIODescriptor, MemAttributes,
-+    PageSliceDescriptor, Physical, Virtual,
++    AccessPermissions, Address, AttributeFields, MMIODescriptor, MemAttributes, MemoryRegion,
++    Physical, Virtual,
 +};
-+use crate::{info, synchronization, synchronization::InitStateLock, warn};
++use crate::{bsp, info, synchronization, synchronization::InitStateLock, warn};
 +
 +//--------------------------------------------------------------------------------------------------
 +// Private Definitions
@@ -2308,8 +2397,9 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/mapping_record.rs 1
 +#[derive(Copy, Clone)]
 +struct MappingRecordEntry {
 +    pub users: [Option<&'static str>; 5],
-+    pub phys_pages: PageSliceDescriptor<Physical>,
++    pub phys_start_addr: Address<Physical>,
 +    pub virt_start_addr: Address<Virtual>,
++    pub num_pages: usize,
 +    pub attribute_fields: AttributeFields,
 +}
 +
@@ -2331,14 +2421,15 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/mapping_record.rs 1
 +impl MappingRecordEntry {
 +    pub fn new(
 +        name: &'static str,
-+        virt_pages: &PageSliceDescriptor<Virtual>,
-+        phys_pages: &PageSliceDescriptor<Physical>,
++        virt_region: &MemoryRegion<Virtual>,
++        phys_region: &MemoryRegion<Physical>,
 +        attr: &AttributeFields,
 +    ) -> Self {
 +        Self {
 +            users: [Some(name), None, None, None, None],
-+            phys_pages: *phys_pages,
-+            virt_start_addr: virt_pages.start_addr(),
++            phys_start_addr: phys_region.start_addr(),
++            virt_start_addr: virt_region.start_addr(),
++            num_pages: phys_region.num_pages(),
 +            attribute_fields: *attr,
 +        }
 +    }
@@ -2373,26 +2464,41 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/mapping_record.rs 1
 +
 +    fn find_duplicate(
 +        &mut self,
-+        phys_pages: &PageSliceDescriptor<Physical>,
++        phys_region: &MemoryRegion<Physical>,
 +    ) -> Option<&mut MappingRecordEntry> {
 +        self.inner
 +            .iter_mut()
 +            .filter(|x| x.is_some())
 +            .map(|x| x.as_mut().unwrap())
 +            .filter(|x| x.attribute_fields.mem_attributes == MemAttributes::Device)
-+            .find(|x| x.phys_pages == *phys_pages)
++            .find(|x| {
++                if x.phys_start_addr != phys_region.start_addr() {
++                    return false;
++                }
++
++                if x.num_pages != phys_region.num_pages() {
++                    return false;
++                }
++
++                true
++            })
 +    }
 +
 +    pub fn add(
 +        &mut self,
 +        name: &'static str,
-+        virt_pages: &PageSliceDescriptor<Virtual>,
-+        phys_pages: &PageSliceDescriptor<Physical>,
++        virt_region: &MemoryRegion<Virtual>,
++        phys_region: &MemoryRegion<Physical>,
 +        attr: &AttributeFields,
 +    ) -> Result<(), &'static str> {
 +        let x = self.find_next_free()?;
 +
-+        *x = Some(MappingRecordEntry::new(name, virt_pages, phys_pages, attr));
++        *x = Some(MappingRecordEntry::new(
++            name,
++            virt_region,
++            phys_region,
++            attr,
++        ));
 +        Ok(())
 +    }
 +
@@ -2408,11 +2514,11 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/mapping_record.rs 1
 +        info!("      -------------------------------------------------------------------------------------------------------------------------------------------");
 +
 +        for i in self.inner.iter().flatten() {
++            let size = i.num_pages * bsp::memory::mmu::KernelGranule::SIZE;
 +            let virt_start = i.virt_start_addr;
-+            let virt_end_inclusive = virt_start + i.phys_pages.size() - 1;
-+            let phys_start = i.phys_pages.start_addr();
-+            let phys_end_inclusive = i.phys_pages.end_addr_inclusive();
-+            let size = i.phys_pages.size();
++            let virt_end_inclusive = virt_start + (size - 1);
++            let phys_start = i.phys_start_addr;
++            let phys_end_inclusive = phys_start + (size - 1);
 +
 +            let (size, unit) = if (size >> MIB_RSHIFT) > 0 {
 +                (size >> MIB_RSHIFT, "MiB")
@@ -2475,21 +2581,21 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/mapping_record.rs 1
 +/// Add an entry to the mapping info record.
 +pub fn kernel_add(
 +    name: &'static str,
-+    virt_pages: &PageSliceDescriptor<Virtual>,
-+    phys_pages: &PageSliceDescriptor<Physical>,
++    virt_region: &MemoryRegion<Virtual>,
++    phys_region: &MemoryRegion<Physical>,
 +    attr: &AttributeFields,
 +) -> Result<(), &'static str> {
-+    KERNEL_MAPPING_RECORD.write(|mr| mr.add(name, virt_pages, phys_pages, attr))
++    KERNEL_MAPPING_RECORD.write(|mr| mr.add(name, virt_region, phys_region, attr))
 +}
 +
 +pub fn kernel_find_and_insert_mmio_duplicate(
 +    mmio_descriptor: &MMIODescriptor,
 +    new_user: &'static str,
 +) -> Option<Address<Virtual>> {
-+    let phys_pages: PageSliceDescriptor<Physical> = (*mmio_descriptor).into();
++    let phys_region: MemoryRegion<Physical> = (*mmio_descriptor).into();
 +
 +    KERNEL_MAPPING_RECORD.write(|mr| {
-+        let dup = mr.find_duplicate(&phys_pages)?;
++        let dup = mr.find_duplicate(&phys_region)?;
 +
 +        if let Err(x) = dup.add_user(new_user) {
 +            warn!("{}", x);
@@ -2507,14 +2613,12 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/mapping_record.rs 1
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/translation_table.rs 14_virtual_mem_part2_mmio_remap/src/memory/mmu/translation_table.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/translation_table.rs
 +++ 14_virtual_mem_part2_mmio_remap/src/memory/mmu/translation_table.rs
-@@ -8,7 +8,105 @@
+@@ -8,7 +8,91 @@
  #[path = "../../_arch/aarch64/memory/mmu/translation_table.rs"]
  mod arch_translation_table;
 
-+use crate::memory::{
-+    mmu::{AttributeFields, PageSliceDescriptor},
-+    Address, Physical, Virtual,
-+};
++use super::{AttributeFields, MemoryRegion};
++use crate::memory::{Address, Physical, Virtual};
 +
  //--------------------------------------------------------------------------------------------------
  // Architectural Public Reexports
@@ -2544,7 +2648,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/translation_table.r
 +        /// The translation table's base address to be used for programming the MMU.
 +        fn phys_base_address(&self) -> Address<Physical>;
 +
-+        /// Map the given virtual pages to the given physical pages.
++        /// Map the given virtual memory region to the given physical memory region.
 +        ///
 +        /// # Safety
 +        ///
@@ -2553,27 +2657,12 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/translation_table.r
 +        ///   mapping to the same physical memory using multiple virtual addresses, which would
 +        ///   break Rust's ownership assumptions. This should be protected against in the kernel's
 +        ///   generic MMU code.
-+        unsafe fn map_pages_at(
++        unsafe fn map_at(
 +            &mut self,
-+            virt_pages: &PageSliceDescriptor<Virtual>,
-+            phys_pages: &PageSliceDescriptor<Physical>,
++            virt_region: &MemoryRegion<Virtual>,
++            phys_region: &MemoryRegion<Physical>,
 +            attr: &AttributeFields,
 +        ) -> Result<(), &'static str>;
-+
-+        /// Obtain a free virtual page slice in the MMIO region.
-+        ///
-+        /// The "MMIO region" is a distinct region of the implementor's choice, which allows
-+        /// differentiating MMIO addresses from others. This can speed up debugging efforts.
-+        /// Ideally, those MMIO addresses are also standing out visually so that a human eye can
-+        /// identify them. For example, by allocating them from near the end of the virtual address
-+        /// space.
-+        fn next_mmio_virt_page_slice(
-+            &mut self,
-+            num_pages: usize,
-+        ) -> Result<PageSliceDescriptor<Virtual>, &'static str>;
-+
-+        /// Check if a virtual page splice is in the "MMIO region".
-+        fn is_virt_page_slice_mmio(&self, virt_pages: &PageSliceDescriptor<Virtual>) -> bool;
 +    }
 +}
 +
@@ -2584,7 +2673,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/translation_table.r
 +#[cfg(test)]
 +mod tests {
 +    use super::*;
-+    use crate::bsp;
++    use crate::memory::mmu::{AccessPermissions, MemAttributes, PageAddress};
 +    use arch_translation_table::MinSizeTranslationTable;
 +    use interface::TranslationTable;
 +    use test_macros::kernel_test;
@@ -2597,61 +2686,63 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/translation_table.r
 +
 +        tables.init();
 +
-+        let x = tables.next_mmio_virt_page_slice(0);
-+        assert!(x.is_err());
++        let virt_start_page_addr: PageAddress<Virtual> = PageAddress::from(0);
++        let virt_end_exclusive_page_addr: PageAddress<Virtual> =
++            virt_start_page_addr.checked_offset(5).unwrap();
 +
-+        let x = tables.next_mmio_virt_page_slice(1_0000_0000);
-+        assert!(x.is_err());
++        let phys_start_page_addr: PageAddress<Physical> = PageAddress::from(0);
++        let phys_end_exclusive_page_addr: PageAddress<Physical> =
++            phys_start_page_addr.checked_offset(5).unwrap();
 +
-+        let x = tables.next_mmio_virt_page_slice(2).unwrap();
-+        assert_eq!(x.size(), bsp::memory::mmu::KernelGranule::SIZE * 2);
++        let virt_region = MemoryRegion::new(virt_start_page_addr, virt_end_exclusive_page_addr);
++        let phys_region = MemoryRegion::new(phys_start_page_addr, phys_end_exclusive_page_addr);
 +
-+        assert_eq!(tables.is_virt_page_slice_mmio(&x), true);
++        let attr = AttributeFields {
++            mem_attributes: MemAttributes::CacheableDRAM,
++            acc_perms: AccessPermissions::ReadWrite,
++            execute_never: true,
++        };
 +
-+        assert_eq!(
-+            tables.is_virt_page_slice_mmio(&PageSliceDescriptor::from_addr(Address::new(0), 1)),
-+            false
-+        );
++        unsafe { assert_eq!(tables.map_at(&virt_region, &phys_region, &attr), Ok(())) };
 +    }
 +}
 
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/types.rs 14_virtual_mem_part2_mmio_remap/src/memory/mmu/types.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/types.rs
 +++ 14_virtual_mem_part2_mmio_remap/src/memory/mmu/types.rs
-@@ -0,0 +1,210 @@
+@@ -0,0 +1,373 @@
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +//
-+// Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
++// Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 +
 +//! Memory Management Unit types.
 +
 +use crate::{
 +    bsp, common,
-+    memory::{Address, AddressType, Physical, Virtual},
++    memory::{Address, AddressType, Physical},
 +};
-+use core::{convert::From, marker::PhantomData};
++use core::{convert::From, iter::Step, num::NonZeroUsize, ops::Range};
 +
 +//--------------------------------------------------------------------------------------------------
 +// Public Definitions
 +//--------------------------------------------------------------------------------------------------
 +
-+/// Generic page type.
-+#[repr(C)]
-+pub struct Page<ATYPE: AddressType> {
-+    inner: [u8; bsp::memory::mmu::KernelGranule::SIZE],
-+    _address_type: PhantomData<ATYPE>,
++/// A wrapper type around [Address] that ensures page alignment.
++#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
++pub struct PageAddress<ATYPE: AddressType> {
++    inner: Address<ATYPE>,
 +}
 +
-+/// Type describing a slice of pages.
-+#[derive(Copy, Clone, PartialOrd, PartialEq)]
-+pub struct PageSliceDescriptor<ATYPE: AddressType> {
-+    start: Address<ATYPE>,
-+    num_pages: usize,
++/// A type that describes a region of memory in quantities of pages.
++#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
++pub struct MemoryRegion<ATYPE: AddressType> {
++    start: PageAddress<ATYPE>,
++    end_exclusive: PageAddress<ATYPE>,
 +}
 +
 +/// Architecture agnostic memory attributes.
 +#[allow(missing_docs)]
-+#[derive(Copy, Clone, PartialOrd, PartialEq)]
++#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 +pub enum MemAttributes {
 +    CacheableDRAM,
 +    Device,
@@ -2659,7 +2750,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/types.rs 14_virtual
 +
 +/// Architecture agnostic access permissions.
 +#[allow(missing_docs)]
-+#[derive(Copy, Clone)]
++#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 +pub enum AccessPermissions {
 +    ReadOnly,
 +    ReadWrite,
@@ -2667,7 +2758,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/types.rs 14_virtual
 +
 +/// Collection of memory attributes.
 +#[allow(missing_docs)]
-+#[derive(Copy, Clone)]
++#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 +pub struct AttributeFields {
 +    pub mem_attributes: MemAttributes,
 +    pub acc_perms: AccessPermissions,
@@ -2678,7 +2769,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/types.rs 14_virtual
 +#[derive(Copy, Clone)]
 +pub struct MMIODescriptor {
 +    start_addr: Address<Physical>,
-+    size: usize,
++    end_addr_exclusive: Address<Physical>,
 +}
 +
 +//--------------------------------------------------------------------------------------------------
@@ -2686,99 +2777,202 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/types.rs 14_virtual
 +//--------------------------------------------------------------------------------------------------
 +
 +//------------------------------------------------------------------------------
-+// Page
++// PageAddress
 +//------------------------------------------------------------------------------
++impl<ATYPE: AddressType> PageAddress<ATYPE> {
++    /// Unwraps the value.
++    pub fn into_inner(self) -> Address<ATYPE> {
++        self.inner
++    }
 +
-+impl<ATYPE: AddressType> Page<ATYPE> {
-+    /// Get a pointer to the instance.
-+    pub const fn as_ptr(&self) -> *const Page<ATYPE> {
-+        self as *const _
++    /// Calculates the offset from the page address.
++    ///
++    /// `count` is in units of [PageAddress]. For example, a count of 2 means `result = self + 2 *
++    /// page_size`.
++    pub fn checked_offset(self, count: isize) -> Option<Self> {
++        if count == 0 {
++            return Some(self);
++        }
++
++        let delta = (count.abs() as usize).checked_mul(bsp::memory::mmu::KernelGranule::SIZE)?;
++        let result = if count.is_positive() {
++            self.inner.as_usize().checked_add(delta)?
++        } else {
++            self.inner.as_usize().checked_sub(delta)?
++        };
++
++        Some(Self {
++            inner: Address::new(result),
++        })
 +    }
 +}
 +
-+//------------------------------------------------------------------------------
-+// PageSliceDescriptor
-+//------------------------------------------------------------------------------
++impl<ATYPE: AddressType> From<usize> for PageAddress<ATYPE> {
++    fn from(addr: usize) -> Self {
++        assert!(
++            common::is_aligned(addr, bsp::memory::mmu::KernelGranule::SIZE),
++            "Input usize not page aligned"
++        );
 +
-+impl<ATYPE: AddressType> PageSliceDescriptor<ATYPE> {
-+    /// Create an instance.
-+    pub const fn from_addr(start: Address<ATYPE>, num_pages: usize) -> Self {
-+        assert!(common::is_aligned(
-+            start.into_usize(),
-+            bsp::memory::mmu::KernelGranule::SIZE
-+        ));
-+        assert!(num_pages > 0);
-+
-+        Self { start, num_pages }
-+    }
-+
-+    /// Return a pointer to the first page of the described slice.
-+    const fn first_page_ptr(&self) -> *const Page<ATYPE> {
-+        self.start.into_usize() as *const _
-+    }
-+
-+    /// Return the number of Pages the slice describes.
-+    pub const fn num_pages(&self) -> usize {
-+        self.num_pages
-+    }
-+
-+    /// Return the memory size this descriptor spans.
-+    pub const fn size(&self) -> usize {
-+        self.num_pages * bsp::memory::mmu::KernelGranule::SIZE
-+    }
-+
-+    /// Return the start address.
-+    pub const fn start_addr(&self) -> Address<ATYPE> {
-+        self.start
-+    }
-+
-+    /// Return the exclusive end address.
-+    pub fn end_addr(&self) -> Address<ATYPE> {
-+        self.start + self.size()
-+    }
-+
-+    /// Return the inclusive end address.
-+    pub fn end_addr_inclusive(&self) -> Address<ATYPE> {
-+        self.start + (self.size() - 1)
-+    }
-+
-+    /// Check if an address is contained within this descriptor.
-+    pub fn contains(&self, addr: Address<ATYPE>) -> bool {
-+        (addr >= self.start_addr()) && (addr <= self.end_addr_inclusive())
-+    }
-+
-+    /// Return a non-mutable slice of Pages.
-+    ///
-+    /// # Safety
-+    ///
-+    /// - Same as applies for `core::slice::from_raw_parts`.
-+    pub unsafe fn as_slice(&self) -> &[Page<ATYPE>] {
-+        core::slice::from_raw_parts(self.first_page_ptr(), self.num_pages)
-+    }
-+}
-+
-+impl From<PageSliceDescriptor<Virtual>> for PageSliceDescriptor<Physical> {
-+    fn from(desc: PageSliceDescriptor<Virtual>) -> Self {
 +        Self {
-+            start: Address::new(desc.start.into_usize()),
-+            num_pages: desc.num_pages,
++            inner: Address::new(addr),
 +        }
 +    }
 +}
 +
-+impl From<MMIODescriptor> for PageSliceDescriptor<Physical> {
-+    fn from(desc: MMIODescriptor) -> Self {
-+        let start_page_addr = desc
-+            .start_addr
-+            .align_down(bsp::memory::mmu::KernelGranule::SIZE);
++impl<ATYPE: AddressType> From<Address<ATYPE>> for PageAddress<ATYPE> {
++    fn from(addr: Address<ATYPE>) -> Self {
++        assert!(addr.is_page_aligned(), "Input Address not page aligned");
 +
-+        let len = ((desc.end_addr_inclusive().into_usize() - start_page_addr.into_usize())
-+            >> bsp::memory::mmu::KernelGranule::SHIFT)
-+            + 1;
++        Self { inner: addr }
++    }
++}
++
++impl<ATYPE: AddressType> Step for PageAddress<ATYPE> {
++    fn steps_between(start: &Self, end: &Self) -> Option<usize> {
++        if start > end {
++            return None;
++        }
++
++        // Since start <= end, do unchecked arithmetic.
++        Some(
++            (end.inner.as_usize() - start.inner.as_usize())
++                >> bsp::memory::mmu::KernelGranule::SHIFT,
++        )
++    }
++
++    fn forward_checked(start: Self, count: usize) -> Option<Self> {
++        start.checked_offset(count as isize)
++    }
++
++    fn backward_checked(start: Self, count: usize) -> Option<Self> {
++        start.checked_offset(-(count as isize))
++    }
++}
++
++//------------------------------------------------------------------------------
++// MemoryRegion
++//------------------------------------------------------------------------------
++impl<ATYPE: AddressType> MemoryRegion<ATYPE> {
++    /// Create an instance.
++    pub fn new(start: PageAddress<ATYPE>, end_exclusive: PageAddress<ATYPE>) -> Self {
++        assert!(start <= end_exclusive);
 +
 +        Self {
-+            start: start_page_addr,
-+            num_pages: len,
++            start,
++            end_exclusive,
++        }
++    }
++
++    fn as_range(&self) -> Range<PageAddress<ATYPE>> {
++        self.into_iter()
++    }
++
++    /// Returns the start page address.
++    pub fn start_page_addr(&self) -> PageAddress<ATYPE> {
++        self.start
++    }
++
++    /// Returns the start address.
++    pub fn start_addr(&self) -> Address<ATYPE> {
++        self.start.into_inner()
++    }
++
++    /// Returns the exclusive end page address.
++    pub fn end_exclusive_page_addr(&self) -> PageAddress<ATYPE> {
++        self.end_exclusive
++    }
++
++    /// Returns the exclusive end page address.
++    pub fn end_inclusive_page_addr(&self) -> PageAddress<ATYPE> {
++        self.end_exclusive.checked_offset(-1).unwrap()
++    }
++
++    /// Checks if self contains an address.
++    pub fn contains(&self, addr: Address<ATYPE>) -> bool {
++        let page_addr = PageAddress::from(addr.align_down_page());
++        self.as_range().contains(&page_addr)
++    }
++
++    /// Checks if there is an overlap with another memory region.
++    pub fn overlaps(&self, other_region: &Self) -> bool {
++        let self_range = self.as_range();
++
++        self_range.contains(&other_region.start_page_addr())
++            || self_range.contains(&other_region.end_inclusive_page_addr())
++    }
++
++    /// Returns the number of pages contained in this region.
++    pub fn num_pages(&self) -> usize {
++        PageAddress::steps_between(&self.start, &self.end_exclusive).unwrap()
++    }
++
++    /// Returns the size in bytes of this region.
++    pub fn size(&self) -> usize {
++        // Invariant: start <= end_exclusive, so do unchecked arithmetic.
++        let end_exclusive = self.end_exclusive.into_inner().as_usize();
++        let start = self.start.into_inner().as_usize();
++
++        end_exclusive - start
++    }
++
++    /// Splits the MemoryRegion like:
++    ///
++    /// --------------------------------------------------------------------------------
++    /// |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |
++    /// --------------------------------------------------------------------------------
++    ///   ^                               ^                                       ^
++    ///   |                               |                                       |
++    ///   left_start     left_end_exclusive                                       |
++    ///                                                                           |
++    ///                                   ^                                       |
++    ///                                   |                                       |
++    ///                                   right_start           right_end_exclusive
++    ///
++    /// Left region is returned to the caller. Right region is the new region for this struct.
++    pub fn take_first_n_pages(&mut self, num_pages: NonZeroUsize) -> Result<Self, &'static str> {
++        let count: usize = num_pages.into();
++
++        let left_end_exclusive = self.start.checked_offset(count as isize);
++        let left_end_exclusive = match left_end_exclusive {
++            None => return Err("Overflow while calculating left_end_exclusive"),
++            Some(x) => x,
++        };
++
++        if left_end_exclusive > self.end_exclusive {
++            return Err("Not enough free pages");
++        }
++
++        let allocation = Self {
++            start: self.start,
++            end_exclusive: left_end_exclusive,
++        };
++        self.start = left_end_exclusive;
++
++        Ok(allocation)
++    }
++}
++
++impl<ATYPE: AddressType> IntoIterator for MemoryRegion<ATYPE> {
++    type Item = PageAddress<ATYPE>;
++    type IntoIter = Range<Self::Item>;
++
++    fn into_iter(self) -> Self::IntoIter {
++        Range {
++            start: self.start,
++            end: self.end_exclusive,
++        }
++    }
++}
++
++impl From<MMIODescriptor> for MemoryRegion<Physical> {
++    fn from(desc: MMIODescriptor) -> Self {
++        let start = PageAddress::from(desc.start_addr.align_down_page());
++        let end_exclusive = PageAddress::from(desc.end_addr_exclusive().align_up_page());
++
++        Self {
++            start,
++            end_exclusive,
 +        }
 +    }
 +}
@@ -2791,8 +2985,12 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/types.rs 14_virtual
 +    /// Create an instance.
 +    pub const fn new(start_addr: Address<Physical>, size: usize) -> Self {
 +        assert!(size > 0);
++        let end_addr_exclusive = Address::new(start_addr.as_usize() + size);
 +
-+        Self { start_addr, size }
++        Self {
++            start_addr,
++            end_addr_exclusive,
++        }
 +    }
 +
 +    /// Return the start address.
@@ -2800,14 +2998,9 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/types.rs 14_virtual
 +        self.start_addr
 +    }
 +
-+    /// Return the inclusive end address.
-+    pub fn end_addr_inclusive(&self) -> Address<Physical> {
-+        self.start_addr + (self.size - 1)
-+    }
-+
-+    /// Return the size.
-+    pub const fn size(&self) -> usize {
-+        self.size
++    /// Return the exclusive end address.
++    pub fn end_addr_exclusive(&self) -> Address<Physical> {
++        self.end_addr_exclusive
 +    }
 +}
 +
@@ -2818,23 +3011,85 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu/types.rs 14_virtual
 +#[cfg(test)]
 +mod tests {
 +    use super::*;
++    use crate::memory::Virtual;
 +    use test_macros::kernel_test;
 +
-+    /// Check if the size of `struct Page` is as expected.
++    /// Sanity of [PageAddress] methods.
 +    #[kernel_test]
-+    fn size_of_page_equals_granule_size() {
++    fn pageaddress_type_method_sanity() {
++        let page_addr: PageAddress<Virtual> =
++            PageAddress::from(bsp::memory::mmu::KernelGranule::SIZE * 2);
++
 +        assert_eq!(
-+            core::mem::size_of::<Page<Physical>>(),
-+            bsp::memory::mmu::KernelGranule::SIZE
++            page_addr.checked_offset(-2),
++            Some(PageAddress::<Virtual>::from(0))
 +        );
++
++        assert_eq!(
++            page_addr.checked_offset(2),
++            Some(PageAddress::<Virtual>::from(
++                bsp::memory::mmu::KernelGranule::SIZE * 4
++            ))
++        );
++
++        assert_eq!(
++            PageAddress::<Virtual>::from(0).checked_offset(0),
++            Some(PageAddress::<Virtual>::from(0))
++        );
++        assert_eq!(PageAddress::<Virtual>::from(0).checked_offset(-1), None);
++
++        let max_page_addr = Address::<Virtual>::new(usize::MAX).align_down_page();
++        assert_eq!(
++            PageAddress::<Virtual>::from(max_page_addr).checked_offset(1),
++            None
++        );
++
++        let zero = PageAddress::<Virtual>::from(0);
++        let three = PageAddress::<Virtual>::from(bsp::memory::mmu::KernelGranule::SIZE * 3);
++        assert_eq!(PageAddress::steps_between(&zero, &three), Some(3));
++    }
++
++    /// Sanity of [MemoryRegion] methods.
++    #[kernel_test]
++    fn memoryregion_type_method_sanity() {
++        let zero = PageAddress::<Virtual>::from(0);
++        let zero_region = MemoryRegion::new(zero, zero);
++        assert_eq!(zero_region.num_pages(), 0);
++        assert_eq!(zero_region.size(), 0);
++
++        let one = PageAddress::<Virtual>::from(bsp::memory::mmu::KernelGranule::SIZE);
++        let one_region = MemoryRegion::new(zero, one);
++        assert_eq!(one_region.num_pages(), 1);
++        assert_eq!(one_region.size(), bsp::memory::mmu::KernelGranule::SIZE);
++
++        let three = PageAddress::<Virtual>::from(bsp::memory::mmu::KernelGranule::SIZE * 3);
++        let mut three_region = MemoryRegion::new(zero, three);
++        assert!(three_region.contains(zero.into_inner()));
++        assert!(!three_region.contains(three.into_inner()));
++        assert!(three_region.overlaps(&one_region));
++
++        let allocation = three_region
++            .take_first_n_pages(NonZeroUsize::new(2).unwrap())
++            .unwrap();
++        assert_eq!(allocation.num_pages(), 2);
++        assert_eq!(three_region.num_pages(), 1);
++
++        let mut count = 0;
++        for i in allocation.into_iter() {
++            assert_eq!(
++                i.into_inner().as_usize(),
++                count * bsp::memory::mmu::KernelGranule::SIZE
++            );
++            count = count + 1;
++        }
 +    }
 +}
 
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs 14_virtual_mem_part2_mmio_remap/src/memory/mmu.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs
 +++ 14_virtual_mem_part2_mmio_remap/src/memory/mmu.rs
-@@ -3,29 +3,23 @@
- // Copyright (c) 2020-2021 Andre Richter <andre.o.richter@gmail.com>
+@@ -3,29 +3,24 @@
+ // Copyright (c) 2020-2022 Andre Richter <andre.o.richter@gmail.com>
 
  //! Memory Management Unit.
 -//!
@@ -2852,6 +3107,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs 14_virtual_mem_p
  #[path = "../_arch/aarch64/memory/mmu.rs"]
  mod arch_mmu;
 
++mod alloc;
 +mod mapping_record;
  mod translation_table;
 +mod types;
@@ -2862,7 +3118,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs 14_virtual_mem_p
 +    memory::{Address, Physical, Virtual},
 +    synchronization, warn,
 +};
-+use core::fmt;
++use core::{fmt, num::NonZeroUsize};
 
 -//--------------------------------------------------------------------------------------------------
 -// Architectural Public Reexports
@@ -2872,7 +3128,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs 14_virtual_mem_p
 
  //--------------------------------------------------------------------------------------------------
  // Public Definitions
-@@ -45,13 +39,15 @@
+@@ -45,13 +40,15 @@
 
      /// MMU functions.
      pub trait MMU {
@@ -2891,7 +3147,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs 14_virtual_mem_p
 
          /// Returns true if the MMU is enabled, false otherwise.
          fn is_enabled(&self) -> bool;
-@@ -64,55 +60,43 @@
+@@ -64,55 +61,51 @@
  /// Describes properties of an address space.
  pub struct AddressSpace<const AS_SIZE: usize>;
 
@@ -2946,31 +3202,39 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs 14_virtual_mem_p
 +// Private Code
 +//--------------------------------------------------------------------------------------------------
 +use interface::MMU;
-+use synchronization::interface::ReadWriteEx;
++use synchronization::interface::*;
 +use translation_table::interface::TranslationTable;
 +
-+/// Map pages in the kernel's translation tables.
++/// Query the BSP for the reserved virtual addresses for MMIO remapping and initialize the kernel's
++/// MMIO VA allocator with it.
++fn kernel_init_mmio_va_allocator() {
++    let region = bsp::memory::mmu::virt_mmio_remap_region();
++
++    alloc::kernel_mmio_va_allocator().lock(|allocator| allocator.initialize(region));
++}
++
++/// Map a region in the kernel's translation tables.
 +///
 +/// No input checks done, input is passed through to the architectural implementation.
 +///
 +/// # Safety
 +///
-+/// - See `map_pages_at()`.
++/// - See `map_at()`.
 +/// - Does not prevent aliasing.
-+unsafe fn kernel_map_pages_at_unchecked(
++unsafe fn kernel_map_at_unchecked(
 +    name: &'static str,
-+    virt_pages: &PageSliceDescriptor<Virtual>,
-+    phys_pages: &PageSliceDescriptor<Physical>,
++    virt_region: &MemoryRegion<Virtual>,
++    phys_region: &MemoryRegion<Physical>,
 +    attr: &AttributeFields,
 +) -> Result<(), &'static str> {
 +    bsp::memory::mmu::kernel_translation_tables()
-+        .write(|tables| tables.map_pages_at(virt_pages, phys_pages, attr))?;
++        .write(|tables| tables.map_at(virt_region, phys_region, attr))?;
 
 -/// Type for expressing the kernel's virtual memory layout.
 -pub struct KernelVirtualLayout<const NUM_SPECIAL_RANGES: usize> {
 -    /// The last (inclusive) address of the address space.
 -    max_virt_addr_inclusive: usize,
-+    if let Err(x) = mapping_record::kernel_add(name, virt_pages, phys_pages, attr) {
++    if let Err(x) = mapping_record::kernel_add(name, virt_region, phys_region, attr) {
 +        warn!("{}", x);
 +    }
 
@@ -2980,7 +3244,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs 14_virtual_mem_p
  }
 
  //--------------------------------------------------------------------------------------------------
-@@ -132,6 +116,9 @@
+@@ -132,6 +125,9 @@
      /// The granule's size.
      pub const SIZE: usize = Self::size_checked();
 
@@ -2990,7 +3254,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs 14_virtual_mem_p
      /// The granule's shift, aka log2(size).
      pub const SHIFT: usize = Self::SIZE.trailing_zeros() as usize;
 
-@@ -159,110 +146,103 @@
+@@ -159,110 +155,147 @@
      }
  }
 
@@ -3001,9 +3265,25 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs 14_virtual_mem_p
 -            acc_perms: AccessPermissions::ReadWrite,
 -            execute_never: true,
 -        }
--    }
++/// Raw mapping of a virtual to physical region in the kernel translation tables.
++///
++/// Prevents mapping into the MMIO range of the tables.
++///
++/// # Safety
++///
++/// - See `kernel_map_at_unchecked()`.
++/// - Does not prevent aliasing. Currently, the callers must be trusted.
++pub unsafe fn kernel_map_at(
++    name: &'static str,
++    virt_region: &MemoryRegion<Virtual>,
++    phys_region: &MemoryRegion<Physical>,
++    attr: &AttributeFields,
++) -> Result<(), &'static str> {
++    if bsp::memory::mmu::virt_mmio_remap_region().overlaps(virt_region) {
++        return Err("Attempt to manually map into MMIO region");
+     }
 -}
--
+
 -/// Human-readable output of a TranslationDescriptor.
 -impl fmt::Display for TranslationDescriptor {
 -    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -3026,135 +3306,62 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs 14_virtual_mem_p
 -        } else {
 -            (size, "Byte")
 -        };
--
++    kernel_map_at_unchecked(name, virt_region, phys_region, attr)?;
+
 -        let attr = match self.attribute_fields.mem_attributes {
 -            MemAttributes::CacheableDRAM => "C",
 -            MemAttributes::Device => "Dev",
 -        };
--
++    Ok(())
++}
+
 -        let acc_p = match self.attribute_fields.acc_perms {
 -            AccessPermissions::ReadOnly => "RO",
 -            AccessPermissions::ReadWrite => "RW",
--        };
--
--        let xn = if self.attribute_fields.execute_never {
--            "PXN"
--        } else {
--            "PX"
--        };
--
--        write!(
--            f,
--            "      {:#010x} - {:#010x} | {: >3} {} | {: <3} {} {: <3} | {}",
--            start, end, size, unit, attr, acc_p, xn, self.name
--        )
--    }
--}
--
--impl<const NUM_SPECIAL_RANGES: usize> KernelVirtualLayout<{ NUM_SPECIAL_RANGES }> {
--    /// Create a new instance.
--    pub const fn new(max: usize, layout: [TranslationDescriptor; NUM_SPECIAL_RANGES]) -> Self {
--        Self {
--            max_virt_addr_inclusive: max,
--            inner: layout,
--        }
--    }
--
--    /// For a virtual address, find and return the physical output address and corresponding
--    /// attributes.
--    ///
--    /// If the address is not found in `inner`, return an identity mapped default with normal
--    /// cacheable DRAM attributes.
--    pub fn virt_addr_properties(
--        &self,
--        virt_addr: usize,
--    ) -> Result<(usize, AttributeFields), &'static str> {
--        if virt_addr > self.max_virt_addr_inclusive {
--            return Err("Address out of range");
--        }
--
--        for i in self.inner.iter() {
--            if (i.virtual_range)().contains(&virt_addr) {
--                let output_addr = match i.physical_range_translation {
--                    Translation::Identity => virt_addr,
--                    Translation::Offset(a) => a + (virt_addr - (i.virtual_range)().start()),
--                };
--
--                return Ok((output_addr, i.attribute_fields));
--            }
--        }
--
--        Ok((virt_addr, AttributeFields::default()))
--    }
--
--    /// Print the memory layout.
--    pub fn print_layout(&self) {
--        use crate::info;
--
--        for i in self.inner.iter() {
--            info!("{}", i);
--        }
--    }
--
--    #[cfg(test)]
--    pub fn inner(&self) -> &[TranslationDescriptor; NUM_SPECIAL_RANGES] {
--        &self.inner
--    }
-+/// Raw mapping of virtual to physical pages in the kernel translation tables.
-+///
-+/// Prevents mapping into the MMIO range of the tables.
-+///
-+/// # Safety
-+///
-+/// - See `kernel_map_pages_at_unchecked()`.
-+/// - Does not prevent aliasing. Currently, the callers must be trusted.
-+pub unsafe fn kernel_map_pages_at(
-+    name: &'static str,
-+    virt_pages: &PageSliceDescriptor<Virtual>,
-+    phys_pages: &PageSliceDescriptor<Physical>,
-+    attr: &AttributeFields,
-+) -> Result<(), &'static str> {
-+    let is_mmio = bsp::memory::mmu::kernel_translation_tables()
-+        .read(|tables| tables.is_virt_page_slice_mmio(virt_pages));
-+    if is_mmio {
-+        return Err("Attempt to manually map into MMIO region");
-+    }
-+
-+    kernel_map_pages_at_unchecked(name, virt_pages, phys_pages, attr)?;
-+
-+    Ok(())
-+}
-+
 +/// MMIO remapping in the kernel translation tables.
 +///
 +/// Typically used by device drivers.
 +///
 +/// # Safety
 +///
-+/// - Same as `kernel_map_pages_at_unchecked()`, minus the aliasing part.
++/// - Same as `kernel_map_at_unchecked()`, minus the aliasing part.
 +pub unsafe fn kernel_map_mmio(
 +    name: &'static str,
 +    mmio_descriptor: &MMIODescriptor,
 +) -> Result<Address<Virtual>, &'static str> {
-+    let phys_pages: PageSliceDescriptor<Physical> = (*mmio_descriptor).into();
-+    let offset_into_start_page =
-+        mmio_descriptor.start_addr().into_usize() & bsp::memory::mmu::KernelGranule::MASK;
++    let phys_region = MemoryRegion::from(*mmio_descriptor);
++    let offset_into_start_page = mmio_descriptor.start_addr().offset_into_page();
 +
-+    // Check if an identical page slice has been mapped for another driver. If so, reuse it.
++    // Check if an identical region has been mapped for another driver. If so, reuse it.
 +    let virt_addr = if let Some(addr) =
 +        mapping_record::kernel_find_and_insert_mmio_duplicate(mmio_descriptor, name)
 +    {
 +        addr
-+    // Otherwise, allocate a new virtual page slice and map it.
++    // Otherwise, allocate a new region and map it.
 +    } else {
-+        let virt_pages: PageSliceDescriptor<Virtual> =
-+            bsp::memory::mmu::kernel_translation_tables()
-+                .write(|tables| tables.next_mmio_virt_page_slice(phys_pages.num_pages()))?;
-+
-+        kernel_map_pages_at_unchecked(
++        let num_pages = match NonZeroUsize::new(phys_region.num_pages()) {
++            None => return Err("Requested 0 pages"),
++            Some(x) => x,
+         };
+
+-        let xn = if self.attribute_fields.execute_never {
+-            "PXN"
+-        } else {
+-            "PX"
+-        };
++        let virt_region =
++            alloc::kernel_mmio_va_allocator().lock(|allocator| allocator.alloc(num_pages))?;
+
+-        write!(
+-            f,
+-            "      {:#010x} - {:#010x} | {: >3} {} | {: <3} {} {: <3} | {}",
+-            start, end, size, unit, attr, acc_p, xn, self.name
+-        )
+-    }
++        kernel_map_at_unchecked(
 +            name,
-+            &virt_pages,
-+            &phys_pages,
++            &virt_region,
++            &phys_region,
 +            &AttributeFields {
 +                mem_attributes: MemAttributes::Device,
 +                acc_perms: AccessPermissions::ReadWrite,
@@ -3162,7 +3369,7 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs 14_virtual_mem_p
 +            },
 +        )?;
 +
-+        virt_pages.start_addr()
++        virt_region.start_addr()
 +    };
 +
 +    Ok(virt_addr + offset_into_start_page)
@@ -3196,24 +3403,111 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory/mmu.rs 14_virtual_mem_p
 +    arch_mmu::mmu().enable_mmu_and_caching(phys_tables_base_addr)
 +}
 +
++/// Finish initialization of the MMU subsystem.
++pub fn post_enable_init() {
++    kernel_init_mmio_va_allocator();
++}
++
 +/// Human-readable print of all recorded kernel mappings.
 +pub fn kernel_print_mappings() {
 +    mapping_record::kernel_print()
  }
 
+-impl<const NUM_SPECIAL_RANGES: usize> KernelVirtualLayout<{ NUM_SPECIAL_RANGES }> {
+-    /// Create a new instance.
+-    pub const fn new(max: usize, layout: [TranslationDescriptor; NUM_SPECIAL_RANGES]) -> Self {
+-        Self {
+-            max_virt_addr_inclusive: max,
+-            inner: layout,
+-        }
+-    }
+-
+-    /// For a virtual address, find and return the physical output address and corresponding
+-    /// attributes.
+-    ///
+-    /// If the address is not found in `inner`, return an identity mapped default with normal
+-    /// cacheable DRAM attributes.
+-    pub fn virt_addr_properties(
+-        &self,
+-        virt_addr: usize,
+-    ) -> Result<(usize, AttributeFields), &'static str> {
+-        if virt_addr > self.max_virt_addr_inclusive {
+-            return Err("Address out of range");
+-        }
+-
+-        for i in self.inner.iter() {
+-            if (i.virtual_range)().contains(&virt_addr) {
+-                let output_addr = match i.physical_range_translation {
+-                    Translation::Identity => virt_addr,
+-                    Translation::Offset(a) => a + (virt_addr - (i.virtual_range)().start()),
+-                };
+-
+-                return Ok((output_addr, i.attribute_fields));
+-            }
+-        }
++//--------------------------------------------------------------------------------------------------
++// Testing
++//--------------------------------------------------------------------------------------------------
+
+-        Ok((virt_addr, AttributeFields::default()))
+-    }
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::memory::mmu::{AccessPermissions, MemAttributes, PageAddress};
++    use test_macros::kernel_test;
+
+-    /// Print the memory layout.
+-    pub fn print_layout(&self) {
+-        use crate::info;
++    /// Check that you cannot map into the MMIO VA range from kernel_map_at().
++    #[kernel_test]
++    fn no_manual_mmio_map() {
++        let phys_start_page_addr: PageAddress<Physical> = PageAddress::from(0);
++        let phys_end_exclusive_page_addr: PageAddress<Physical> =
++            phys_start_page_addr.checked_offset(5).unwrap();
++        let phys_region = MemoryRegion::new(phys_start_page_addr, phys_end_exclusive_page_addr);
++
++        let num_pages = NonZeroUsize::new(phys_region.num_pages()).unwrap();
++        let virt_region = alloc::kernel_mmio_va_allocator()
++            .lock(|allocator| allocator.alloc(num_pages))
++            .unwrap();
+
+-        for i in self.inner.iter() {
+-            info!("{}", i);
+-        }
+-    }
++        let attr = AttributeFields {
++            mem_attributes: MemAttributes::CacheableDRAM,
++            acc_perms: AccessPermissions::ReadWrite,
++            execute_never: true,
++        };
+
+-    #[cfg(test)]
+-    pub fn inner(&self) -> &[TranslationDescriptor; NUM_SPECIAL_RANGES] {
+-        &self.inner
++        unsafe {
++            assert_eq!(
++                kernel_map_at("test", &virt_region, &phys_region, &attr),
++                Err("Attempt to manually map into MMIO region")
++            )
++        };
+     }
+ }
+
 diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory.rs 14_virtual_mem_part2_mmio_remap/src/memory.rs
 --- 13_exceptions_part2_peripheral_IRQs/src/memory.rs
 +++ 14_virtual_mem_part2_mmio_remap/src/memory.rs
-@@ -6,12 +6,136 @@
+@@ -5,3 +5,163 @@
+ //! Memory Management.
 
  pub mod mmu;
-
--use core::ops::RangeInclusive;
-+use crate::common;
++
++use crate::{bsp, common};
 +use core::{
 +    fmt,
 +    marker::PhantomData,
-+    ops::{AddAssign, RangeInclusive, SubAssign},
++    ops::{Add, Sub},
 +};
 +
 +//--------------------------------------------------------------------------------------------------
@@ -3224,24 +3518,24 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory.rs 14_virtual_mem_part2
 +pub trait AddressType: Copy + Clone + PartialOrd + PartialEq {}
 +
 +/// Zero-sized type to mark a physical address.
-+#[derive(Copy, Clone, PartialOrd, PartialEq)]
++#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 +pub enum Physical {}
 +
 +/// Zero-sized type to mark a virtual address.
-+#[derive(Copy, Clone, PartialOrd, PartialEq)]
++#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 +pub enum Virtual {}
 +
 +/// Generic address type.
-+#[derive(Copy, Clone, PartialOrd, PartialEq)]
++#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 +pub struct Address<ATYPE: AddressType> {
 +    value: usize,
 +    _address_type: PhantomData<fn() -> ATYPE>,
 +}
-
- //--------------------------------------------------------------------------------------------------
- // Public Code
- //--------------------------------------------------------------------------------------------------
-
++
++//--------------------------------------------------------------------------------------------------
++// Public Code
++//--------------------------------------------------------------------------------------------------
++
 +impl AddressType for Physical {}
 +impl AddressType for Virtual {}
 +
@@ -3254,59 +3548,59 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory.rs 14_virtual_mem_part2
 +        }
 +    }
 +
-+    /// Align down.
-+    pub const fn align_down(self, alignment: usize) -> Self {
-+        let aligned = common::align_down(self.value, alignment);
-+
-+        Self {
-+            value: aligned,
-+            _address_type: PhantomData,
-+        }
-+    }
-+
-+    /// Converts `Address` into an usize.
-+    pub const fn into_usize(self) -> usize {
++    /// Convert to usize.
++    pub const fn as_usize(self) -> usize {
 +        self.value
 +    }
++
++    /// Align down to page size.
++    #[must_use]
++    pub const fn align_down_page(self) -> Self {
++        let aligned = common::align_down(self.value, bsp::memory::mmu::KernelGranule::SIZE);
++
++        Self::new(aligned)
++    }
++
++    /// Align up to page size.
++    #[must_use]
++    pub const fn align_up_page(self) -> Self {
++        let aligned = common::align_up(self.value, bsp::memory::mmu::KernelGranule::SIZE);
++
++        Self::new(aligned)
++    }
++
++    /// Checks if the address is page aligned.
++    pub const fn is_page_aligned(&self) -> bool {
++        common::is_aligned(self.value, bsp::memory::mmu::KernelGranule::SIZE)
++    }
++
++    /// Return the address' offset into the corresponding page.
++    pub const fn offset_into_page(&self) -> usize {
++        self.value & bsp::memory::mmu::KernelGranule::MASK
++    }
 +}
 +
-+impl<ATYPE: AddressType> core::ops::Add<usize> for Address<ATYPE> {
++impl<ATYPE: AddressType> Add<usize> for Address<ATYPE> {
 +    type Output = Self;
 +
-+    fn add(self, other: usize) -> Self {
-+        Self {
-+            value: self.value + other,
-+            _address_type: PhantomData,
++    #[inline(always)]
++    fn add(self, rhs: usize) -> Self::Output {
++        match self.value.checked_add(rhs) {
++            None => panic!("Overflow on Address::add"),
++            Some(x) => Self::new(x),
 +        }
 +    }
 +}
 +
-+impl<ATYPE: AddressType> AddAssign for Address<ATYPE> {
-+    fn add_assign(&mut self, other: Self) {
-+        *self = Self {
-+            value: self.value + other.into_usize(),
-+            _address_type: PhantomData,
-+        };
-+    }
-+}
-+
-+impl<ATYPE: AddressType> core::ops::Sub<usize> for Address<ATYPE> {
++impl<ATYPE: AddressType> Sub<Address<ATYPE>> for Address<ATYPE> {
 +    type Output = Self;
 +
-+    fn sub(self, other: usize) -> Self {
-+        Self {
-+            value: self.value - other,
-+            _address_type: PhantomData,
++    #[inline(always)]
++    fn sub(self, rhs: Address<ATYPE>) -> Self::Output {
++        match self.value.checked_sub(rhs.value) {
++            None => panic!("Overflow on Address::sub"),
++            Some(x) => Self::new(x),
 +        }
-+    }
-+}
-+
-+impl<ATYPE: AddressType> SubAssign for Address<ATYPE> {
-+    fn sub_assign(&mut self, other: Self) {
-+        *self = Self {
-+            value: self.value - other.into_usize(),
-+            _address_type: PhantomData,
-+        };
 +    }
 +}
 +
@@ -3339,14 +3633,40 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/src/memory.rs 14_virtual_mem_part2
 +    }
 +}
 +
- /// Zero out an inclusive memory range.
- ///
- /// # Safety
++//--------------------------------------------------------------------------------------------------
++// Testing
++//--------------------------------------------------------------------------------------------------
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use test_macros::kernel_test;
++
++    /// Sanity of [Address] methods.
++    #[kernel_test]
++    fn address_type_method_sanity() {
++        let addr = Address::<Virtual>::new(bsp::memory::mmu::KernelGranule::SIZE + 100);
++
++        assert_eq!(
++            addr.align_down_page().as_usize(),
++            bsp::memory::mmu::KernelGranule::SIZE
++        );
++
++        assert_eq!(
++            addr.align_up_page().as_usize(),
++            bsp::memory::mmu::KernelGranule::SIZE * 2
++        );
++
++        assert_eq!(addr.is_page_aligned(), false);
++
++        assert_eq!(addr.offset_into_page(), 100);
++    }
++}
 
 diff -uNr 13_exceptions_part2_peripheral_IRQs/tests/02_exception_sync_page_fault.rs 14_virtual_mem_part2_mmio_remap/tests/02_exception_sync_page_fault.rs
 --- 13_exceptions_part2_peripheral_IRQs/tests/02_exception_sync_page_fault.rs
 +++ 14_virtual_mem_part2_mmio_remap/tests/02_exception_sync_page_fault.rs
-@@ -21,7 +21,7 @@
+@@ -21,18 +21,40 @@
 
  #[no_mangle]
  unsafe fn kernel_init() -> ! {
@@ -3354,10 +3674,10 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/tests/02_exception_sync_page_fault
 +    use libkernel::driver::interface::DriverManager;
 
      exception::handling_init();
-     bsp::console::qemu_bring_up_console();
-@@ -29,10 +29,30 @@
+-    bsp::console::qemu_bring_up_console();
+
+     // This line will be printed as the test header.
      println!("Testing synchronous exception handling by causing a page fault");
-     println!("-------------------------------------------------------------------\n");
 
 -    if let Err(string) = memory::mmu::mmu().enable_mmu_and_caching() {
 -        println!("MMU: {}", string);
@@ -3374,6 +3694,9 @@ diff -uNr 13_exceptions_part2_peripheral_IRQs/tests/02_exception_sync_page_fault
          cpu::qemu_exit_failure()
      }
 +    // Printing will silently fail from here on, because the driver's MMIO is not remapped yet.
++
++    memory::mmu::post_enable_init();
++    bsp::console::qemu_bring_up_console();
 +
 +    // Bring up the drivers needed for printing first.
 +    for i in bsp::driver::driver_manager()
