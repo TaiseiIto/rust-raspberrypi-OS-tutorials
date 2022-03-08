@@ -1,33 +1,52 @@
 # Tutorial 16 - Virtual Memory Part 4: Higher-Half Kernel
 
 ## tl;dr
+## 要約
 
 - The time has come: We map and run the kernel from the top of the 64 bit virtual address space! 🥳
+- 時は来た．我々はkernelを仮想address空間の最も番地の高い領域にmapして走らせる．
 
 ## Table of Contents
+## 目次
 
 - [Introduction](#introduction)
+- [導入](#introduction)
 - [Implementation](#implementation)
+- [実装](#implementation)
   - [Linking Changes](#linking-changes)
+  - [Linkingの変更](#linking-changes)
   - [Position-Independent Boot Code](#position-independent-boot-code)
+  - [位置非依存 Boot Code](#position-independent-boot-code)
 - [Test it](#test-it)
+- [検証](#test-it)
 - [Diff to previous](#diff-to-previous)
+- [前回との差分](#diff-to-previous)
 
 ## Introduction
+## 導入
 
 A long time in the making, in this tutorial we finally map the kernel to the most significant area
 (alternatively: higher-half) of the 64 bit virtual address space. This makes room for future
 applications to use the whole of the least significant area of the virtual memory space.
+
+長い工程を経て，この項目で我々はついにkernelを64bit仮想address空間の最も番地の大きい領域(あるいは上半分)にmapする．
+これにより将来作るapplicationsのために番地の小さい領域を確保できる．
 
 As has been teased since `tutorial 14`, we will make use of the `AArch64`'s `TTBR1`. Since the
 kernel's virtual address space size currently is `1 GiB` (defined in
 `bsp/__board_name__/memory/mmu.rs`), `TTBR1` will cover the range from `0xffff_ffff_ffff_ffff` down
 to `ffff_ffff_c000_0000` (both inclusive).
 
+`tutorial 14`で述べたように，我々は`AArch64`の`TTBR1`を活用する．
+kernelの仮想address空間の大きさは今のところ(`bsp/__board_name__/memory/mmu.rs`に定義されている通り)`1GiB`なので，`TTBR1`は仮想address空間`0xffff_ffff_ffff_ffff`から`ffff_ffff_c000_0000`までを覆う
+
 ## Implementation
+## 実装
 
 In `src/memory/mmu.rs`, we extend the `AssociatedTranslationTable` trait with a `TableStartFromTop`
 associated type:
+
+`src/memory/mmu.rs`で，我々は`AssociatedTranslationTable`traitに`TableStartFromTop`を追加する．
 
 ```rust
 /// Intended to be implemented for [`AddressSpace`].
@@ -47,6 +66,9 @@ pub trait AssociatedTranslationTable {
 Architecture specific code in `_arch/aarch64/memory/mmu/translation_table.rs` populates both types
 now by making use of a new generic that is added to `FixedSizeTranslationTable`, which defines
 whether the covered address space starts from the top or the bottom:
+
+`_arch/aarch64/memory/mmu/translation_table.rs`のArchitecture固有のcodeは`FixedSizeTranslationTable`に追加された新しいgenericを利用することによって両方の型を移植する．
+両方の型は仮想address空間が上から始まるのかそれとも下から始まるのかを定義する．
 
 ```rust
 pub struct FixedSizeTranslationTable<const NUM_TABLES: usize, const START_FROM_TOP: bool> {
@@ -70,6 +92,8 @@ where
 Thanks to this infrastructure, `BSP` Rust code in `bsp/__board_name__/memory/mmu.rs` only needs to
 change to this newly introduced type in order to switch from lower half to higher half translation
 tables for the kernel:
+
+この基本構造により，`bsp/__board_name__/memory/mmu.rs`の`BSP` Rust codeはkernel領域をlower halfからhigher halfに移行させるために今回導入されたこれらの型を切り替えるだけでよくなる．
 
 ```rust
 type KernelTranslationTable =
