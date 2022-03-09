@@ -261,9 +261,15 @@ ADR_ABS	x2, kernel_init
 Both values are forwarded to the Rust entry point function `_start_rust()`, which in turn forwards
 them to `fn prepare_el2_to_el1_transition(...)`.
 
+どちらの値もRustの開始関数`_start_rust()`に転送され，`_start_rust()`がさらにこれらを`fn prepare_el2_to_el1_transition(...)`に転送します．
+
 One more thing to consider is that we keep on programming the boot core's stack address for `EL2`
 using an address that is calculated `PC-relative`, because all the `EL2` code will still run while
 virtual memory _is disabled_. As such, we need the "physical" address of the stack, so to speak.
+
+もうひとつ考慮すべきことは，我々は`Program Counter relative`に計算されるaddressを使う`EL2`のためにboot coreのstack addressをprogramし続けていることだ．
+なぜならば`EL2`codeは仮想memoryが有効になっていなくても走り続けるからだ．
+故にstackの物理addressが必要となる．
 
 The previous tutorial also explained that it is not easily possible to compile select files using
 `-fpic` in `Rust`. Still, we are doing some function calls in `Rust` before virtual memory is
@@ -271,10 +277,20 @@ enabled, so _theoretically_, there is room for failure. However, branches to loc
 are usually generated PC-relative. So it is a small risk worth taking. Should it still fail someday,
 at least our automated CI pipeline would give notice when the tests start to fail.
 
+前回のtutorialでも`Rust`で`-fpic`を使って指定したfileのcompileが簡単でないことを説明した．
+未だに，我々は仮想memory有効化前に`Rust`で何回か関数を呼び出しているので，理論的には，起動に失敗する可能性があります．
+しかし，`AArch64`特有のcodeへの分岐はいつもPC相対に生成される．
+故にこれは取るに足らない小さな危険性だ．
+いつかこれで起動が失敗したならば，testsが通らなくなったときに，最低でも我々の自動CI pipelineがそれに気づかせてくれるだろう．
+
 ## Test it
 
 That's it! We are ready for a higher-half kernel now. Power up your Raspberrys and marvel at those
 beautiful (virtual) addresses:
+
+これで終わりです．
+higher-half kernelの準備が整いました．
+Raspberrysを起動してこれらの綺麗な仮想addressを見てみましょう．
 
 Raspberry Pi 3:
 
