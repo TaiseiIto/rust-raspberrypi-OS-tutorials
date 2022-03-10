@@ -82,18 +82,35 @@ impl MemoryManagementUnit {
     /// Configure various settings of stage 1 of the EL1 translation regime.
     #[inline(always)]
     fn configure_translation_control(&self) {
+        // t0szからt1szに変更された
         let t1sz = (64 - bsp::memory::mmu::KernelVirtAddrSpace::SIZE_SHIFT) as u64;
 
+        // Translation Control Register
+        // https://developer.arm.com/documentation/ddi0595/2021-06/AArch64-Registers/TCR-EL1--Translation-Control-Register--EL1-
         TCR_EL1.write(
+            // TBI : Top Byte Ingore flag
+            // TBI0::UsedからTBI1::Usedに変更された
+            // 前回:仮想addressのtop byteが0xffのとき，TTBR1_EL0を使う．
+            // 今回:仮想addressのtop byteが0xffのとき，TTBR1_EL1を使う．
+            // 以下，TTBR0_EL1用のflagを立てていたのを全てTTBR1_EL1用のflagに変更
+            // これでkernel領域とTTBR1_EL1が関連付けられる
             TCR_EL1::TBI1::Used
                 + TCR_EL1::IPS::Bits_40
+                // TG0をTG1に変更
                 + TCR_EL1::TG1::KiB_64
+                // SH0をSH1に変更
                 + TCR_EL1::SH1::Inner
+                // ORGN0をORGN1に変更
                 + TCR_EL1::ORGN1::WriteBack_ReadAlloc_WriteAlloc_Cacheable
+                // IRGN0をIRGN1に変更
                 + TCR_EL1::IRGN1::WriteBack_ReadAlloc_WriteAlloc_Cacheable
+                // EPD0をEPD1に変更
                 + TCR_EL1::EPD1::EnableTTBR1Walks
+                // A0をA1に変更
                 + TCR_EL1::A1::TTBR1
+                // T0SZをT1SZに変更
                 + TCR_EL1::T1SZ.val(t1sz)
+                // EPD0をEPD1に変更
                 + TCR_EL1::EPD0::DisableTTBR0Walks,
         );
     }
@@ -133,6 +150,8 @@ impl memory::mmu::interface::MMU for MemoryManagementUnit {
         self.set_up_mair();
 
         // Set the "Translation Table Base Register".
+        // kernelのtranslation tableのbase addressをTTBR1_EL1に設定
+        // 前回まではTTBR0_EL1に設定していた
         TTBR1_EL1.set_baddr(phys_tables_base_addr.as_usize() as u64);
 
         self.configure_translation_control();

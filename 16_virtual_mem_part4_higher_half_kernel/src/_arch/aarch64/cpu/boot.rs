@@ -24,14 +24,18 @@ global_asm!(include_str!("boot.s"));
 //--------------------------------------------------------------------------------------------------
 
 /// Prepares the transition from EL2 to EL1.
-///
+/// EL2(hypervisor)からEL1(OS)への移行の準備
 /// # Safety
 ///
 /// - The `bss` section is not initialized yet. The code must not use or reference it in any way.
+/// - `bss`領域はまだ初期化されていない．故にここでは`bss`領域を参照してはならない．
 /// - The HW state of EL1 must be prepared in a sound way.
+/// - EL1のHW状態は正しく用意される必要がある．
 #[inline(always)]
 unsafe fn prepare_el2_to_el1_transition(
+    // 引数が物理addressだったのを仮想addressに変更
     virt_boot_core_stack_end_exclusive_addr: u64,
+    // 今回追加された引数
     virt_kernel_init_addr: u64,
 ) {
     // Enable timer counter registers for EL1.
@@ -56,10 +60,12 @@ unsafe fn prepare_el2_to_el1_transition(
     );
 
     // Second, let the link register point to kernel_init().
+    // 引数が仮想addressに変わった
     ELR_EL2.set(virt_kernel_init_addr);
 
     // Set up SP_EL1 (stack pointer), which will be used by EL1 once we "return" to it. Since there
     // are no plans to ever return to EL2, just re-use the same stack.
+    // 引数が仮想addressに変わった
     SP_EL1.set(virt_boot_core_stack_end_exclusive_addr);
 }
 
@@ -77,10 +83,12 @@ unsafe fn prepare_el2_to_el1_transition(
 #[no_mangle]
 pub unsafe extern "C" fn _start_rust(
     phys_kernel_tables_base_addr: u64,
+    // 引数が仮想addressに変わった
     virt_boot_core_stack_end_exclusive_addr: u64,
     virt_kernel_init_addr: u64,
 ) -> ! {
     prepare_el2_to_el1_transition(
+        // 引数が仮想addressに変わった
         virt_boot_core_stack_end_exclusive_addr,
         virt_kernel_init_addr,
     );
@@ -91,5 +99,6 @@ pub unsafe extern "C" fn _start_rust(
 
     // Use `eret` to "return" to EL1. Since virtual memory will already be enabled, this results in
     // execution of kernel_init() in EL1 from its _virtual address_.
+    // EL1(OS)でkernel_init()を仮想addressで実行する．
     asm::eret()
 }

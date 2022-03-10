@@ -19,15 +19,15 @@
 .endm
 
 // Load the address of a symbol into a register, absolute.
-//
+// 引数で指定したsymbolの64 bit 絶対(PC相対でない)addressを引数で指定したregisterに読み込む
 // # Resources
 //
 // - https://sourceware.org/binutils/docs-2.36/as/AArch64_002dRelocations.html
 .macro ADR_ABS register, symbol
-	movz	\register, #:abs_g3:\symbol
-	movk	\register, #:abs_g2_nc:\symbol
-	movk	\register, #:abs_g1_nc:\symbol
-	movk	\register, #:abs_g0_nc:\symbol
+	movz	\register, #:abs_g3:\symbol		// bits 48-63, overflow check
+	movk	\register, #:abs_g2_nc:\symbol	// bits 31-47, no overflow check
+	movk	\register, #:abs_g1_nc:\symbol	// bits 16-31, no overflow check
+	movk	\register, #:abs_g0_nc:\symbol	// bits  0-15, no overflow check
 .endm
 
 .equ _EL2, 0x8
@@ -69,12 +69,14 @@ _start:
 	// Prepare the jump to Rust code.
 .L_prepare_rust:
 	// Load the base address of the kernel's translation tables.
+	// bsp/__board_name__/memory/mmu.rsに定義されているkernelのtranslation tablesのbase address
 	ldr	x0, PHYS_KERNEL_TABLES_BASE_ADDR // provided by bsp/__board_name__/memory/mmu.rs
 
 	// Load the _absolute_ addresses of the following symbols. Since the kernel is linked at
 	// the top of the 64 bit address space, these are effectively virtual addresses.
-	ADR_ABS	x1, __boot_core_stack_end_exclusive
-	ADR_ABS	x2, kernel_init
+	// 上で定義したmacroを使って絶対仮想addressを読み込む
+	ADR_ABS	x1, __boot_core_stack_end_exclusive	// stackの底
+	ADR_ABS	x2, kernel_init						// EL1(OS)で実行する開始地点
 
 	// Load the PC-relative address of the stack and set the stack pointer.
 	//
@@ -84,10 +86,18 @@ _start:
 	// Setting the stack pointer to this value ensures that anything that still runs in EL2,
 	// until the kernel returns to EL1 with the MMU enabled, works as well. After the return to
 	// EL1, the virtual address of the stack retrieved above will be used.
-	ADR_REL	x4, __boot_core_stack_end_exclusive
-	mov	sp, x4
+	// 
+	// stackのPC相対addressを読み込み，stack pointerを設定する．
+	// firmwareがkernelをmemoryに読み込んだ直後に_start_rustが実行されるので，これらは物理addressである．
+	ADR_REL	x4, __boot_core_stack_end_exclusive	// stackの底のPC相対物理address
+	mov	sp, x4									// stack pointerを設定する
 
 	// Jump to Rust code. x0, x1 and x2 hold the function arguments provided to _start_rust().
+	// Rustで書かれた_start_rust関数に飛ぶ
+	// 引数は以下の通り
+	// kernelのtranslation tablesのbase addressが格納されたx0
+	// stackの底の絶対仮想addressが格納されたx1
+	// EL1(OS)で実行する開始地点が格納されたx2
 	b	_start_rust
 
 	// Infinitely wait for events (aka "park the core").

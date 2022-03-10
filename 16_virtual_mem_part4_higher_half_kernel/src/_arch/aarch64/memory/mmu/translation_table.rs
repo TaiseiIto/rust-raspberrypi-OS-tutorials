@@ -134,6 +134,7 @@ trait StartAddr {
 
 /// Big monolithic struct for storing the translation tables. Individual levels must be 64 KiB
 /// aligned, so the lvl3 is put first.
+/// kernel空間とuser空間を区別するためのSTART_FROM_TOPが追加された
 #[repr(C)]
 #[repr(align(65536))]
 pub struct FixedSizeTranslationTable<const NUM_TABLES: usize, const START_FROM_TOP: bool> {
@@ -302,9 +303,11 @@ impl<const AS_SIZE: usize> memory::mmu::AssociatedTranslationTable
 where
     [u8; Self::SIZE >> Granule512MiB::SHIFT]: Sized,
 {
+    // kernel領域のTable
     type TableStartFromTop =
         FixedSizeTranslationTable<{ Self::SIZE >> Granule512MiB::SHIFT }, true>;
 
+    // user領域のTable
     type TableStartFromBottom =
         FixedSizeTranslationTable<{ Self::SIZE >> Granule512MiB::SHIFT }, false>;
 }
@@ -312,6 +315,7 @@ where
 impl<const NUM_TABLES: usize, const START_FROM_TOP: bool>
     FixedSizeTranslationTable<NUM_TABLES, START_FROM_TOP>
 {
+    // kernel領域の仮想始点address
     const START_FROM_TOP_OFFSET: Address<Virtual> =
         Address::new((usize::MAX - (Granule512MiB::SIZE * NUM_TABLES)) + 1);
 
@@ -340,6 +344,7 @@ impl<const NUM_TABLES: usize, const START_FROM_TOP: bool>
     }
 
     /// Helper to calculate the lvl2 and lvl3 indices from an address.
+    /// 仮想addressからlvl2とlvl3のtranslation table内における要素番号を計算
     #[inline(always)]
     fn lvl2_lvl3_index_from_page_addr(
         &self,
@@ -348,10 +353,14 @@ impl<const NUM_TABLES: usize, const START_FROM_TOP: bool>
         let mut addr = virt_page_addr.into_inner();
 
         if START_FROM_TOP {
+            // kernel領域の場合kernelのtranslation tableを使用するので
+            // kernel領域の始点を起点とするaddressに直す
             addr = addr - Self::START_FROM_TOP_OFFSET;
         }
 
+        // lvl2 translation tableにおける要素番号
         let lvl2_index = addr.as_usize() >> Granule512MiB::SHIFT;
+        // lvl3 translation tableにおける要素番号
         let lvl3_index = (addr.as_usize() & Granule512MiB::MASK) >> Granule64KiB::SHIFT;
 
         if lvl2_index > (NUM_TABLES - 1) {
