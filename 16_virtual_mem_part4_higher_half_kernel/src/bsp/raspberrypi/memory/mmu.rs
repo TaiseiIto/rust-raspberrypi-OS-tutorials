@@ -19,6 +19,7 @@ use crate::{
 // Private Definitions
 //--------------------------------------------------------------------------------------------------
 
+// Higher half kernelにするためTableStartFromBottomからTableStartFromTopに変更
 type KernelTranslationTable =
     <KernelVirtAddrSpace as AssociatedTranslationTable>::TableStartFromTop;
 
@@ -152,7 +153,13 @@ pub fn virt_mmio_remap_region() -> MemoryRegion<Virtual> {
 /// The actual translation table entries for the kernel binary are generated using the offline
 /// `translation table tool` and patched into the kernel binary. This function just adds the mapping
 /// record entries.
+/// 
+/// Mapping recordの追加
+/// 
+/// 実際のkernel binaryのtranslation table entriesは`translation table tool`を使って生成されkernel binaryに埋め込まれる．
+/// この関数はmapping record entriesを追加するだけで実際の値は書き込まない．
 pub fn kernel_add_mapping_records_for_precomputed() {
+    // 前回までboot core stackはここにあった．
     let virt_code_region = virt_code_region();
     generic_mmu::kernel_add_mapping_record(
         "Kernel code and RO data",
@@ -169,6 +176,8 @@ pub fn kernel_add_mapping_records_for_precomputed() {
         &kernel_page_attributes(virt_data_region.start_page_addr()),
     );
 
+    // boot core stackのmapping record entry
+    // 場所が変わったのでそれに合わせてmapping record entryを作る順序も変えた．
     let virt_boot_core_stack_region = virt_boot_core_stack_region();
     generic_mmu::kernel_add_mapping_record(
         "Kernel boot-core stack",
