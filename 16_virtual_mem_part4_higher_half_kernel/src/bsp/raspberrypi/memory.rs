@@ -8,6 +8,10 @@
 //!
 //! The Raspberry's firmware copies the kernel binary to 0x8_0000. The preceding region will be used
 //! as the boot core's stack.
+//! 
+//! 物理memory layout
+//! Raspberry Piのfirmwareはkernel bynaryを0x8_0000に読み込む．
+//! PCはaddressの大きい方に進んでいき，boot core stackはaddressの小さい方に伸びて行く
 //!
 //! +---------------------------------------+
 //! |                                       | boot_core_stack_start @ 0x0
@@ -35,7 +39,10 @@
 //!
 //!
 //! The virtual memory layout is as follows:
+//! 
+//! 仮想memory layout
 //!
+//! このずーっと上の方にuser領域がある
 //! +---------------------------------------+
 //! |                                       | code_start @ __kernel_virt_start_addr
 //! | .text                                 |
@@ -54,7 +61,7 @@
 //! +---------------------------------------+
 //! |                                       |  mmio_remap_end_exclusive
 //! | Unmapped guard page                   |
-//! |                                       |
+//! |                                       |  stack overflowを検出するための領域
 //! +---------------------------------------+
 //! |                                       | boot_core_stack_start
 //! |                                       |                                ^
