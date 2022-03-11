@@ -68,6 +68,7 @@ pub struct MMIODescriptor {
 //------------------------------------------------------------------------------
 impl<ATYPE: AddressType> PageAddress<ATYPE> {
     /// The largest value that can be represented by this type.
+    /// 仮想memory空間の最後のpageのaddress
     pub const MAX: Self = PageAddress {
         inner: Address::new(usize::MAX).align_down_page(),
     };

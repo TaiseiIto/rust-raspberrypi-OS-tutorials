@@ -67,11 +67,15 @@ pub trait AssociatedTranslationTable {
     /// A translation table whose address range is:
     ///
     /// [u64::MAX, (u64::MAX - AS_SIZE) + 1]
+    /// 
+    /// Kernel領域に使われるTable
     type TableStartFromTop;
 
     /// A translation table whose address range is:
     ///
     /// [AS_SIZE - 1, 0]
+    /// 
+    /// User領域に使われるTable
     type TableStartFromBottom;
 }
 
