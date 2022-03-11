@@ -255,6 +255,7 @@ class TranslationTable
     end
 
     def lvl2_lvl3_index_from(addr)
+        # kernel_virt_start_addrが0でなくなったので仮想memory空間のkernel領域内におけるindexを計算するためにkernel_virt_start_addrを引き算するようにした
         addr -= BSP.kernel_virt_start_addr
 
         lvl2_index = addr >> Granule512MiB::SHIFT

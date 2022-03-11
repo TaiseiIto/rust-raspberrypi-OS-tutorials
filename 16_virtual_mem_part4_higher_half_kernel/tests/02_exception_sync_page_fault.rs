@@ -28,6 +28,8 @@ unsafe fn kernel_init() -> ! {
     // This line will be printed as the test header.
     println!("Testing synchronous exception handling by causing a page fault");
 
+    // Page faultが起きることを確認
+    // 前回までは9GiBのところを試していた
     println!("Writing to bottom of address space to address 1 GiB...");
     let big_addr: u64 = 1 * 1024 * 1024 * 1024;
     core::ptr::read_volatile(big_addr as *mut u64);

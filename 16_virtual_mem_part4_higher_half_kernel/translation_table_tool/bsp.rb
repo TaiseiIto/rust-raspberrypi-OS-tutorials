@@ -6,6 +6,7 @@
 
 # Raspberry Pi 3 + 4
 class RaspberryPi
+    # kernel_virt_start_addrが0でなくなったのでメンバとして追加した
     attr_reader :kernel_granule, :kernel_virt_addr_space_size, :kernel_virt_start_addr
 
     MEMORY_SRC = File.read('src/bsp/raspberrypi/memory.rs').split("\n")
@@ -14,6 +15,7 @@ class RaspberryPi
         @kernel_granule = Granule64KiB
 
         @kernel_virt_addr_space_size = KERNEL_ELF.symbol_value('__kernel_virt_addr_space_size')
+        # KERNEL_ELFからkernel_virt_start_addrを読み込む
         @kernel_virt_start_addr = KERNEL_ELF.symbol_value('__kernel_virt_start_addr')
 
         @virt_addr_of_kernel_tables = KERNEL_ELF.symbol_value('KERNEL_TABLES')
