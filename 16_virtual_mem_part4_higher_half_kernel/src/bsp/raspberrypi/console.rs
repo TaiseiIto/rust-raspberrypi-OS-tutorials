@@ -17,26 +17,36 @@ use core::fmt;
 /// We try to init panic-versions of the GPIO and the UART. The panic versions are not protected
 /// with synchronization primitives, which increases chances that we get to print something, even
 /// when the kernel's default GPIO or UART instances happen to be locked at the time of the panic.
+/// 
+/// Panic時に，panic handlerがこの関数を読んで何かしら出力してからsystemは停止する．
+/// Kernelが普段使っているGPIOとUARTがlockされていたとしても出力できるように，同期原子性を保証しないPanic版のGPIOとUARTを初期化する．
 ///
 /// # Safety
 ///
 /// - Use only for printing during a panic.
+/// 
+/// 実機で実行するときの本番用のpanic_console_out
 #[cfg(not(feature = "test_build"))]
 pub unsafe fn panic_console_out() -> impl fmt::Write {
     use driver::interface::DeviceDriver;
 
     // If remapping of the driver's MMIO hasn't already happened, we won't be able to print. Just
     // park the CPU core in this case.
+    // DriverのMMIO領域がまだremapされていなければ印字できない．
+    // その場合CPUを停止する．
+    // 前回までは，remapされていない場合物理addressを代わりに使っていた．
     let gpio_mmio_start_addr = match super::GPIO.virt_mmio_start_addr() {
-        None => cpu::wait_forever(),
-        Some(x) => x,
+        None => cpu::wait_forever(), // GPIOのMMIO領域がまだremapされていないので停止
+        Some(x) => x, // GPIOのMMIO領域の先頭仮想address
     };
 
     let uart_mmio_start_addr = match super::PL011_UART.virt_mmio_start_addr() {
-        None => cpu::wait_forever(),
-        Some(x) => x,
+        None => cpu::wait_forever(), // UARTのMMIO領域がまだremapされていないので停止
+        Some(x) => x, // UARTのMMIO領域の先頭仮想address
     };
 
+    // Panic時に普通のGPIO, UART device driverがlockされていても出力できるように，
+    // 原子性を保証しないPanic時専用のdevice driverを作る
     let mut panic_gpio = device_driver::PanicGPIO::new(gpio_mmio_start_addr);
     let mut panic_uart = device_driver::PanicUart::new(uart_mmio_start_addr);
 
@@ -52,12 +62,13 @@ pub unsafe fn panic_console_out() -> impl fmt::Write {
 }
 
 /// Reduced version for test builds.
+/// QEMUで実行するときのtest用のpanic_console_out
 #[cfg(feature = "test_build")]
 pub unsafe fn panic_console_out() -> impl fmt::Write {
     use driver::interface::DeviceDriver;
 
     let uart_mmio_start_addr = match super::PL011_UART.virt_mmio_start_addr() {
-        None => cpu::wait_forever(),
+        None => cpu::wait_forever(), // ここでも，UART MMIOがremapされていなかったら停止するようにしている．
         Some(x) => x,
     };
     let mut panic_uart = device_driver::PanicUart::new(uart_mmio_start_addr);
