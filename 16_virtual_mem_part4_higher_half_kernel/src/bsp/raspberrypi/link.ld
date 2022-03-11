@@ -9,7 +9,7 @@ PAGE_SIZE = 64K;
 PAGE_MASK = PAGE_SIZE - 1;
 
 /* The kernel's virtual address range will be:
- *
+ * kernelの先頭仮想address
  * [END_ADDRESS_INCLUSIVE, START_ADDRESS]
  * [u64::MAX             , (u64::MAX - __kernel_virt_addr_space_size) + 1]
  */
@@ -41,6 +41,8 @@ PHDRS
 SECTIONS
 {
     . =  __kernel_virt_start_addr;
+
+    /* Boot core stackがもともとあった場所 */
 
     ASSERT((. & PAGE_MASK) == 0, "Start of address space is not page aligned")
 
@@ -91,11 +93,13 @@ SECTIONS
 
     /***********************************************************************************************
     * Guard Page
+    * このguarg pageへのaccessがあったら，stack overflowが起きたということになる
     ***********************************************************************************************/
     . += PAGE_SIZE;
 
     /***********************************************************************************************
     * Boot Core Stack
+    * 今回boot core stackがここに移動した
     ***********************************************************************************************/
     .boot_core_stack (NOLOAD) : AT(__rpi_phys_dram_start_addr)
     {
