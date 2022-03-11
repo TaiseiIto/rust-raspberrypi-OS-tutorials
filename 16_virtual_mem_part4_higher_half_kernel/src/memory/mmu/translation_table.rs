@@ -92,6 +92,7 @@ mod tests {
     use test_macros::kernel_test;
 
     /// Sanity checks for the TranslationTable implementation.
+    /// TranslationTable構造体の実装の健全性確認
     #[kernel_test]
     fn translationtable_implementation_sanity() {
         // This will occupy a lot of space on the stack.
@@ -99,7 +100,9 @@ mod tests {
 
         assert!(tables.init().is_ok());
 
+        // Kernel空間の終端のpageの仮想address
         let virt_end_exclusive_page_addr: PageAddress<Virtual> = PageAddress::MAX;
+        // Kernel空間の先頭のpageの仮想address(終端のpageの5page前)
         let virt_start_page_addr: PageAddress<Virtual> =
             virt_end_exclusive_page_addr.checked_offset(-5).unwrap();
 
@@ -123,6 +126,7 @@ mod tests {
             Ok(phys_start_page_addr)
         );
 
+        // Kernel領域の先頭pageの1つ前のpageがinvalidであることを確認
         assert_eq!(
             tables.try_page_attributes(virt_start_page_addr.checked_offset(-1).unwrap()),
             Err("Page marked invalid")
